@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Муха в браузере — живой мозг</title>
+<style>
+  :root { --bg:#07090f; --panel:#0e1220; --line:#1c2338; --fg:#d6dcf0; --dim:#7b85a6;
+          --acc:#ffb347; --ok:#5ee29a; --bad:#ff5c7a; --cyan:#57d6ff; --chrome:#202124; --chrome2:#35363a; }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.45 "Segoe UI", system-ui, sans-serif; overflow:hidden; }
+  #app { position:absolute; inset:0; display:grid; grid-template-columns: minmax(300px, 24%) 1fr minmax(320px, 26%); }
+  #left { position:relative; border-right:1px solid var(--line); overflow:hidden; }
+  #left .hdr { position:absolute; left:16px; top:14px; right:12px; pointer-events:none; }
+  #left h1 { margin:0 0 4px; font-size:15px; font-weight:600; letter-spacing:.3px; }
+  #left .sub { color:var(--dim); font-size:11.5px; }
+  #legend { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:11px; color:var(--dim); margin-top:8px; }
+  #legend i { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; vertical-align:-1px; }
+  #dragpad { position:absolute; left:0; right:0; top:0; height:62%; cursor:grab; }
+  #dragpad:active { cursor:grabbing; }
+  #left .credit { position:absolute; left:16px; bottom:10px; font-size:10.5px; color:#4b5470; pointer-events:none; }
+  #left .flylabel { position:absolute; left:0; right:0; bottom:34px; text-align:center; font-size:11px; color:var(--dim); pointer-events:none; }
+  #left .flylabel b { color:var(--fg); font-weight:600; }
+
+  #center { display:flex; align-items:center; justify-content:center; padding:18px 22px; min-width:0; }
+  #browser { width:100%; max-width:1180px; background:var(--chrome); border-radius:10px; box-shadow:0 20px 60px rgba(0,0,0,.6), 0 0 0 1px #3c3f45; overflow:hidden; font-family:"Segoe UI", system-ui, sans-serif; }
+  .bar { display:flex; align-items:center; gap:8px; }
+  .bar.title { height:40px; padding:0 12px; background:var(--chrome); }
+  .dots i { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:6px; }
+  .dots i:nth-child(1){background:#ff5f57} .dots i:nth-child(2){background:#febc2e} .dots i:nth-child(3){background:#28c840}
+  .tab { display:flex; align-items:center; gap:8px; height:32px; margin-top:8px; padding:0 12px; background:var(--chrome2); border-radius:8px 8px 0 0; max-width:280px; color:#e8eaed; font-size:12.5px; }
+  .tab img { width:16px; height:16px; }
+  .tab span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tab b { font-weight:400; color:#9aa0a6; margin-left:4px; }
+  .plus { color:#9aa0a6; font-size:18px; margin-left:2px; }
+  .sess { margin-left:auto; font-size:11px; color:#9aa0a6; padding:3px 8px; border:1px solid #3c3f45; border-radius:12px; }
+  .sess.on { color:#5ee29a; border-color:#2b5a45; }
+  .bar.nav { height:40px; padding:0 10px; background:var(--chrome2); }
+  .btn { color:#9aa0a6; width:26px; height:26px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:15px; }
+  .omni { flex:1; height:28px; background:#202124; border-radius:14px; display:flex; align-items:center; gap:8px; padding:0 12px; color:#e8eaed; font-size:12.5px; min-width:0; }
+  .omni .lock { color:#9aa0a6; font-size:11px; }
+  .omni span#url { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #viewport { position:relative; width:100%; aspect-ratio:1280/800; background:#fff; overflow:hidden; }
+  #shot { position:absolute; inset:0; width:100%; height:100%; display:block; }
+  #overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  #tip { position:absolute; display:none; padding:3px 8px; background:rgba(20,22,30,.92); color:var(--acc); border:1px solid var(--acc); border-radius:4px; font-size:11.5px; white-space:nowrap; pointer-events:none; transform:translate(-50%, -140%); }
+  .bar.status { height:24px; padding:0 12px; background:var(--chrome); font-size:11px; color:#9aa0a6; justify-content:space-between; }
+
+  #right { background:var(--panel); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
+  #right section { padding:10px 14px; border-bottom:1px solid var(--line); }
+  #right h2 { margin:0 0 7px; font-size:11px; font-weight:600; letter-spacing:.8px; text-transform:uppercase; color:var(--dim); }
+  #stats { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  #stats div { background:#0a0d18; border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
+  #stats b { display:block; font-size:15px; font-weight:600; }
+  #stats span { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.5px; }
+  .grp { display:grid; grid-template-columns:118px 1fr 38px; gap:8px; align-items:center; font-size:11px; color:var(--dim); padding:1px 0; }
+  .grp .b { height:6px; background:#141a2c; border-radius:3px; overflow:hidden; }
+  .grp .b i { display:block; height:100%; width:0; transition:width .15s; }
+  .grp .v { text-align:right; font-family:Consolas, monospace; }
+  canvas.wide { width:100%; display:block; border-radius:4px; background:#0a0d18; }
+  #links { flex:1; min-height:80px; overflow:auto; padding:6px 14px; }
+  .link { display:grid; grid-template-columns:28px 1fr 42px; gap:8px; align-items:center; padding:2px 4px; border-radius:4px; font-size:11.5px; }
+  .link .i { color:var(--dim); font-family:Consolas, monospace; }
+  .link .t { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--fg); }
+  .link .bar { height:4px; background:#1a2138; border-radius:2px; margin-top:3px; overflow:hidden; }
+  .link .bar i { display:block; height:100%; background:var(--cyan); width:0; transition:width .4s; }
+  .link .p { text-align:right; font-family:Consolas, monospace; color:var(--dim); }
+  .link.chosen { background:#2a1d0a; outline:1px solid var(--acc); }
+  .link.chosen .bar i { background:var(--acc); }
+  .link.chosen .t, .link.chosen .p { color:var(--acc); }
+  #log { height:120px; overflow:auto; font-family:Consolas, monospace; font-size:11px; color:var(--dim); }
+  #log div { padding:1px 0; }
+  #log .ok { color:var(--ok); } #log .bad { color:var(--bad); } #log .act { color:var(--acc); }
+  #gl { position:fixed; inset:0; pointer-events:none; z-index:10; }
+  #flash { position:fixed; inset:0; pointer-events:none; opacity:0; transition:opacity .25s; z-index:5; }
+  #wait { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); color:var(--dim); font-size:14px; z-index:6; background:rgba(7,9,15,.8); padding:8px 14px; border-radius:6px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="left">
+    <div id="dragpad" title="вращать мозг"></div>
+    <div class="hdr">
+      <h1>Мозг мухи · MaleCNS</h1>
+      <div class="sub" id="hudline">загрузка нейронов…</div>
+      <div id="legend">
+        <span><i style="background:#4d8dff"></i>зрительные доли</span>
+        <span><i style="background:#b57bff"></i>центральный мозг</span>
+        <span><i style="background:#4de08a"></i>VNC</span>
+        <span><i style="background:#ffb347"></i>нисходящие</span>
+        <span><i style="background:#ff5c5c"></i>моторные</span>
+        <span><i style="background:#57f0ff"></i>сетчатка</span>
+        <span><i style="background:#ff4dd2"></i>PPL101</span>
+      </div>
+    </div>
+    <div class="flylabel" id="flylabel"><b>Drosophila</b> · парит</div>
+    <div class="credit">3D-модель мухи: «Fly» by jeremy, Poly Pizza, CC-BY 3.0 · перетаскивание — вращать мозг</div>
+  </aside>
+
+  <main id="center">
+    <div id="browser">
+      <div class="bar title">
+        <span class="dots"><i></i><i></i><i></i></span>
+        <div class="tab"><img id="fav" alt=""><span id="tabtitle">Новая вкладка</span><b>×</b></div>
+        <span class="plus">+</span>
+        <span class="sess" id="sess">гость</span>
+      </div>
+      <div class="bar nav">
+        <span class="btn">←</span><span class="btn">→</span><span class="btn">⟳</span>
+        <div class="omni"><span class="lock">🔒</span><span id="url">about:blank</span></div>
+        <span class="btn">⋮</span>
+      </div>
+      <div id="viewport">
+        <img id="shot" alt="">
+        <canvas id="overlay"></canvas>
+        <div id="tip"></div>
+      </div>
+      <div class="bar status"><span id="status">ожидание симуляции…</span><span id="inline"></span></div>
+    </div>
+  </main>
+
+  <aside id="right">
+    <section>
+      <h2>Состояние</h2>
+      <div id="stats">
+        <div><b id="s-ep">0</b><span>эпизод</span></div>
+        <div><b id="s-step">0</b><span>шаг</span></div>
+        <div><b id="s-rate">—</b><span>активность</span></div>
+        <div><b id="s-ret">0</b><span>награда</span></div>
+      </div>
+    </section>
+    <section>
+      <h2>Активность по отделам мозга</h2>
+      <div id="groups"></div>
+    </section>
+    <section>
+      <h2>Спайки readout: 512 нисходящих + 512 моторных</h2>
+      <canvas id="raster" class="wide" height="150"></canvas>
+    </section>
+    <section>
+      <h2>Доля активных нейронов · награды</h2>
+      <canvas id="trace" class="wide" height="56"></canvas>
+    </section>
+    <section style="padding-bottom:2px"><h2>Решение — softmax по ссылкам</h2></section>
+    <div id="links"></div>
+    <section>
+      <h2>Журнал</h2>
+      <div id="log"></div>
+    </section>
+  </aside>
+</div>
+<div id="flash"></div>
+<div id="wait">ожидание симуляции…</div>
+<canvas id="gl"></canvas>
+
+<script src="/assets/three.min.js"></script>
+<script src="/assets/GLTFLoader.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const PX_W = 1280, PX_H = 800;
+
+// ------------------------------------------------------------------ 3-D overlay in *pixel* units
+// World units == CSS pixels on the z=0 plane, origin at the window centre, y up. Anything on z=0
+// lines up exactly with the DOM underneath, so the fly can land on real link boxes.
+const glCanvas = $('gl');
+const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setClearColor(0x000000, 0);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 10, 20000);
+scene.add(new THREE.AmbientLight(0x9aa6cc, 0.8));
+const key = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set(-300, 500, 800); scene.add(key);
+const fill = new THREE.DirectionalLight(0x57d6ff, 0.35); fill.position.set(400, -200, 300); scene.add(fill);
+let W = 1, H = 1;
+function resize() {
+  W = innerWidth; H = innerHeight;
+  renderer.setSize(W, H, false);
+  camera.aspect = W / H; camera.updateProjectionMatrix();
+  camera.position.set(0, 0, (H / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+  camera.lookAt(0, 0, 0);
+  layout();
+}
+const s2w = (sx, sy, z = 0) => new THREE.Vector3(sx - W / 2, H / 2 - sy, z);
+
+// ------------------------------------------------------------------ brain point cloud (left column, top)
+const GROUP_COL = [[0.55, 0.58, 0.7], [0.30, 0.55, 1.0], [0.71, 0.48, 1.0], [0.30, 0.88, 0.54], [1.0, 0.70, 0.28], [1.0, 0.36, 0.36], [0.34, 0.94, 1.0], [1.0, 0.30, 0.82]];
+const GROUP_NAME = ['прочие', 'зрительные доли', 'центральный мозг', 'VNC', 'нисходящие', 'моторные', 'сетчатка', 'дофамин PPL101'];
+const GROUP_CSS = ['#8c93b3', '#4d8dff', '#b57bff', '#4de08a', '#ffb347', '#ff5c5c', '#57f0ff', '#ff4dd2'];
+const brainGroup = new THREE.Group(); scene.add(brainGroup);
+let N = 0, base = null, colors = null, actNow = null, actTarget = null, groupArr = null, points = null, dopaFlash = 0;
+let readoutPos = [], nDescending = 512, groupIdx = [];
+const spin = { x: 0.15, y: 0, drag: null, idle: 0 };
+async function loadBrain() {
+  const meta = await (await fetch('/meta.json')).json();
+  const raw = new Float32Array(await (await fetch('/soma.bin')).arrayBuffer());
+  N = meta.n; groupArr = Uint8Array.from(atob(meta.group), c => c.charCodeAt(0));
+  readoutPos = meta.readout; nDescending = meta.n_descending;
+  const pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {   // dataset: x lateral, y dorso-ventral, z antero-posterior -> brain on top, VNC below
+    pos[i * 3] = raw[i * 3]; pos[i * 3 + 1] = -raw[i * 3 + 2]; pos[i * 3 + 2] = raw[i * 3 + 1];
+  }
+  base = new Float32Array(N * 3); colors = new Float32Array(N * 3); actNow = new Float32Array(N); actTarget = new Float32Array(N);
+  groupIdx = GROUP_COL.map(() => []);
+  for (let i = 0; i < N; i++) { const c = GROUP_COL[groupArr[i]] || GROUP_COL[0]; base.set(c, i * 3); groupIdx[groupArr[i]].push(i); }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  points = new THREE.Points(geo, new THREE.PointsMaterial({ size: 2.2, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+  brainGroup.add(points);
+  updateColors();
+  $('hudline').textContent = `${meta.total.toLocaleString('ru')} нейронов · ${meta.synapses.toLocaleString('ru')} синапсов · ${N.toLocaleString('ru')} сом на экране`;
+  const g = $('groups'); g.innerHTML = '';
+  for (let k = 1; k < GROUP_COL.length; k++) g.insertAdjacentHTML('beforeend', `<div class="grp"><span>${GROUP_NAME[k]}</span><div class="b"><i id="gb${k}" style="background:${GROUP_CSS[k]}"></i></div><span class="v" id="gv${k}">0%</span></div>`);
+  layout();
+}
+function updateColors() {
+  const df = dopaFlash;
+  for (let i = 0; i < N; i++) {
+    const a = actNow[i] += (actTarget[i] - actNow[i]) * 0.35;
+    const k = 0.16 + 0.84 * a, j = i * 3;
+    let r = base[j] * k + a * 0.45, g = base[j + 1] * k + a * 0.45, b = base[j + 2] * k + a * 0.3;
+    if (df > 0 && groupArr[i] === 7) { r = 1; g = 0.2 * (1 - df); b = 0.6; }
+    colors[j] = r; colors[j + 1] = g; colors[j + 2] = b;
+  }
+  if (points) points.geometry.attributes.color.needsUpdate = true;
+}
+const pad = $('dragpad');
+pad.addEventListener('pointerdown', e => { spin.drag = [e.clientX, e.clientY]; spin.idle = 0; pad.setPointerCapture(e.pointerId); });
+pad.addEventListener('pointerup', () => spin.drag = null);
+pad.addEventListener('pointermove', e => {
+  if (!spin.drag) return;
+  spin.y += (e.clientX - spin.drag[0]) * 0.008; spin.x = Math.max(-1.2, Math.min(1.2, spin.x + (e.clientY - spin.drag[1]) * 0.008));
+  spin.drag = [e.clientX, e.clientY]; spin.idle = 0;
+});
+
+// ------------------------------------------------------------------ the fly (glTF, wings split L/R for flapping)
+const flyRoot = new THREE.Group(); scene.add(flyRoot);
+const fly = { wings: [], ready: false, len: 1 };
+function splitWings(mesh) {
+  const g = mesh.geometry, pos = g.attributes.position, idx = g.index, L = [], R = [];
+  for (let i = 0; i < idx.count; i += 3) {
+    const a = idx.getX(i), b = idx.getX(i + 1), c = idx.getX(i + 2);
+    ((pos.getX(a) + pos.getX(b) + pos.getX(c)) / 3 < 0 ? L : R).push(a, b, c);
+  }
+  const mat = mesh.material.clone(); mat.transparent = true; mat.opacity = 0.6; mat.side = THREE.DoubleSide; mat.depthWrite = false; mat.roughness = 0.25; mat.metalness = 0.1;
+  const box = new THREE.Box3().setFromBufferAttribute(pos);
+  const rootY = box.min.y + 0.15, rootZ = (box.min.z + box.max.z) / 2 - 0.4;   // wing hinge: near the thorax, at the wing base
+  return [[L, -1], [R, 1]].map(([tris, s]) => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', pos); if (g.attributes.normal) geo.setAttribute('normal', g.attributes.normal); if (g.attributes.uv) geo.setAttribute('uv', g.attributes.uv);
+    geo.setIndex(tris);
+    const m = new THREE.Mesh(geo, mat);
+    const pivot = new THREE.Group(); pivot.position.set(s * 0.3, rootY, rootZ); m.position.set(-s * 0.3, -rootY, -rootZ);
+    pivot.add(m); mesh.parent.add(pivot);
+    return { pivot, s };
+  });
+}
+new THREE.GLTFLoader().load('/assets/fly.glb', gltf => {
+  const model = gltf.scene;
+  const meshes = []; model.traverse(o => { if (o.isMesh) meshes.push(o); });
+  // widest primitive = wings
+  let wingMesh = null, best = 0;
+  for (const m of meshes) { m.geometry.computeBoundingBox(); const w = m.geometry.boundingBox.max.x - m.geometry.boundingBox.min.x; if (w > best) { best = w; wingMesh = m; } m.material.roughness = 0.55; }
+  if (wingMesh) { fly.wings = splitWings(wingMesh); wingMesh.parent.remove(wingMesh); }
+  for (const m of meshes) { const c = m.material.color; if (c.r > 0.7 && c.g < 0.4) { m.material.emissive = new THREE.Color(0x5a0a0a); m.material.roughness = 0.3; } }   // eyes glow
+  const box = new THREE.Box3().setFromObject(model), c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+  model.position.sub(c);
+  const wrap = new THREE.Group(); wrap.rotation.y = Math.PI; wrap.add(model);   // head was -z; make it +z (lookAt convention)
+  fly.len = Math.max(size.x, size.y, size.z); fly.wrap = wrap; flyRoot.add(wrap); fly.ready = true;
+  layout();
+}, undefined, err => { console.warn('fly.glb failed, using placeholder', err); const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshStandardMaterial({ color: 0x555555 })); m.scale.set(1, 0.8, 1.6); flyRoot.add(m); fly.len = 3.2; fly.ready = true; layout(); });
+
+const flyState = { mode: 'hover', pos: new THREE.Vector3(), home: new THREE.Vector3(), from: null, to: null, t0: 0, dur: 1.3, after: 'hover', look: new THREE.Vector3() };
+const landedQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI)
+  .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));   // back to the camera, head up the page
+function flyTo(target, after, dur) { flyState.from = flyState.pos.clone(); flyState.to = target; flyState.t0 = performance.now(); flyState.dur = dur; flyState.mode = 'fly'; flyState.after = after; }
+function takeOff() { if (flyState.mode === 'landed') flyTo(flyState.home.clone(), 'hover', 1.0); }
+
+// ------------------------------------------------------------------ layout: pin brain + fly home to the left column
+function layout() {
+  const r = $('left').getBoundingClientRect();
+  const cx = r.left + r.width / 2;
+  const S = Math.min(r.height * 0.27, r.width * 0.5);
+  brainGroup.position.copy(s2w(cx, r.top + r.height * 0.42)); brainGroup.scale.setScalar(S);
+  flyState.home.copy(s2w(cx, r.top + r.height * 0.82));
+  if (fly.ready) flyRoot.scale.setScalar(Math.min(r.width * 0.45, 190) / fly.len);
+  if (flyState.mode === 'hover') flyState.pos.copy(flyState.home);
+  fitOverlay();
+}
+addEventListener('resize', resize);
+
+// ------------------------------------------------------------------ browser window (DOM) + overlay
+const overlay = $('overlay'), octx = overlay.getContext('2d');
+let links = [], chosen = -1, ripple = null, k = 1;   // k = overlay px per page px
+function fitOverlay() {
+  const r = overlay.getBoundingClientRect(); if (!r.width) return;
+  const dpr = Math.min(devicePixelRatio, 2);
+  overlay.width = Math.round(r.width * dpr); overlay.height = Math.round(r.height * dpr);
+  octx.setTransform(dpr, 0, 0, dpr, 0, 0); k = r.width / PX_W; drawOverlay();
+}
+function boxCenter(box) {   // hidden links (menus, zero-size) -> the top menu bar
+  const [x, y, w, h] = box;
+  if (w <= 0 || h <= 0) return [PX_W / 2, 36];
+  return [Math.max(8, Math.min(PX_W - 8, x + w / 2)), Math.max(8, Math.min(PX_H - 8, y + h / 2))];
+}
+function drawOverlay() {
+  octx.clearRect(0, 0, overlay.width, overlay.height);
+  links.forEach((l, i) => {
+    const [x, y, w, h] = l.box; if (w <= 0 || h <= 0) return;
+    octx.strokeStyle = i === chosen ? '#ffb347' : 'rgba(87,214,255,0.6)'; octx.lineWidth = i === chosen ? 3 : 1.2;
+    octx.strokeRect((x - 2) * k, (y - 2) * k, (w + 4) * k, (h + 4) * k);
+    if (i === chosen) { octx.fillStyle = 'rgba(255,179,71,0.18)'; octx.fillRect(x * k, y * k, w * k, h * k); }
+  });
+  if (ripple) {
+    const t = (performance.now() - ripple.t0) / 900;
+    if (t < 1) for (let j = 0; j < 2; j++) {
+      const tt = Math.max(0, t - j * 0.25);
+      octx.beginPath(); octx.arc(ripple.x * k, ripple.y * k, (10 + tt * 120) * k, 0, Math.PI * 2);
+      octx.strokeStyle = `rgba(255,179,71,${(1 - tt) * 0.9})`; octx.lineWidth = (5 * (1 - tt) + 1) * k; octx.stroke();
+    } else ripple = null;
+  }
+}
+function linkScreen(box) {   // page px -> window px
+  const r = overlay.getBoundingClientRect(), [cx, cy] = boxCenter(box);
+  return [r.left + cx * k, r.top + cy * k];
+}
+function showTip(i) {
+  const tip = $('tip'); if (i < 0 || !links[i]) { tip.style.display = 'none'; return; }
+  const [cx, cy] = boxCenter(links[i].box);
+  tip.textContent = (links[i].text || links[i].url.replace(/^https?:\/\/[^/]+/, '')) + '  ← клик'; tip.style.left = cx * k + 'px'; tip.style.top = cy * k + 'px'; tip.style.display = 'block';
+}
+
+// ------------------------------------------------------------------ right panel: brain activity
+const rateHist = [], rewardMarks = [];
+function log(msg, cls = '') { const d = document.createElement('div'); d.className = cls; d.textContent = msg; const l = $('log'); l.prepend(d); while (l.children.length > 60) l.lastChild.remove(); }
+function drawTrace() {
+  const c = $('trace'); if (c.width !== c.clientWidth) c.width = c.clientWidth;
+  const ctx = c.getContext('2d'), Wc = c.width, Hc = c.height;
+  ctx.clearRect(0, 0, Wc, Hc);
+  const n = rateHist.length; if (!n) return;
+  const max = Math.max(0.05, ...rateHist);
+  ctx.beginPath();
+  rateHist.forEach((v, i) => { const x = i / Math.max(1, n - 1) * Wc, y = Hc - 3 - (v / max) * (Hc - 8); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  ctx.strokeStyle = '#57d6ff'; ctx.lineWidth = 1.5; ctx.stroke();
+  rewardMarks.forEach(m => { const x = m.i / Math.max(1, n - 1) * Wc; ctx.fillStyle = m.r > 0 ? '#5ee29a' : '#ff5c7a'; ctx.fillRect(x - 1, 2, 2, Hc - 4); });
+  ctx.fillStyle = '#7b85a6'; ctx.font = '10px Consolas'; ctx.fillText(max.toFixed(2), Wc - 30, 11);
+}
+function drawRaster(a) {
+  const c = $('raster'); if (c.width !== c.clientWidth) { c.width = c.clientWidth; const ctx = c.getContext('2d'); ctx.fillStyle = '#0a0d18'; ctx.fillRect(0, 0, c.width, c.height); }
+  const ctx = c.getContext('2d'), Wc = c.width, Hc = c.height, col = 2;
+  ctx.drawImage(c, col, 0, Wc - col, Hc, 0, 0, Wc - col, Hc);
+  ctx.fillStyle = '#0a0d18'; ctx.fillRect(Wc - col, 0, col, Hc);
+  const n = readoutPos.length, rows = Hc, per = n / rows;
+  for (let r = 0; r < rows; r++) {
+    let v = 0; const lo = Math.floor(r * per), hi = Math.floor((r + 1) * per);
+    for (let i = lo; i < hi; i++) { const p = readoutPos[i]; if (p >= 0 && a[p] > v) v = a[p]; }
+    if (v < 40) continue;
+    ctx.fillStyle = (r * per < nDescending ? `rgba(255,179,71,${v / 255})` : `rgba(255,92,92,${v / 255})`);
+    ctx.fillRect(Wc - col, r, col, 1);
+  }
+  ctx.fillStyle = 'rgba(28,35,56,.9)'; ctx.fillRect(0, Math.round(nDescending / per), Wc, 1);
+}
+function updateGroups() {
+  for (let g = 1; g < GROUP_COL.length; g++) {
+    const ids = groupIdx[g]; if (!ids || !ids.length) continue;
+    let s = 0; for (const i of ids) s += actTarget[i]; s /= ids.length;
+    $('gb' + g).style.width = Math.min(100, s * 300) + '%'; $('gv' + g).textContent = (s * 100).toFixed(1) + '%';
+  }
+}
+function renderLinks(probs) {
+  const box = $('links'); box.innerHTML = '';
+  links.forEach((l, i) => {
+    const p = probs ? probs[i] || 0 : 0;
+    const d = document.createElement('div'); d.className = 'link' + (i === chosen ? ' chosen' : '');
+    d.innerHTML = `<span class="i">${String(i).padStart(2, '0')}</span><div><div class="t"></div><div class="bar"><i style="width:${(p * 100).toFixed(1)}%"></i></div></div><span class="p">${probs ? (p * 100).toFixed(1) + '%' : ''}</span>`;
+    d.querySelector('.t').textContent = (l.text || '') + '  ' + l.url.replace(/^https?:\/\/[^/]+/, '');
+    box.appendChild(d);
+    if (i === chosen) d.scrollIntoView({ block: 'nearest' });
+  });
+}
+function flash(color) { const f = $('flash'); f.style.background = `radial-gradient(ellipse at 15% 50%, ${color}, transparent 60%)`; f.style.opacity = 1; setTimeout(() => f.style.opacity = 0, 250); }
+const setFlyLabel = s => $('flylabel').innerHTML = `<b>Drosophila</b> · ${s}`;
+
+// ------------------------------------------------------------------ events from python
+let total = 0;
+const es = new EventSource('/events');
+es.onmessage = ev => {
+  const m = JSON.parse(ev.data);
+  $('wait').style.display = 'none';
+  if (m.t === 'act') {
+    const a = Uint8Array.from(atob(m.a), c => c.charCodeAt(0));
+    if (!actTarget) return;
+    for (let i = 0; i < N; i++) actTarget[i] = a[i] / 255;
+    let frac = 0; for (let i = 0; i < a.length; i++) if (a[i] > 128) frac++;
+    rateHist.push(frac / Math.max(1, a.length)); if (rateHist.length > 400) { rateHist.shift(); rewardMarks.forEach(r => r.i--); }
+    while (rewardMarks.length && rewardMarks[0].i < 0) rewardMarks.shift();
+    $('s-rate').textContent = (frac / Math.max(1, a.length) * 100).toFixed(1) + '%';
+    drawTrace(); drawRaster(a); updateGroups();
+  } else if (m.t === 'page') {
+    links = m.links; chosen = -1; showTip(-1);
+    $('shot').src = 'data:image/png;base64,' + m.png;
+    const short = m.url.replace(/^https?:\/\//, '');
+    $('url').textContent = short; $('tabtitle').textContent = m.title || short;
+    try { const u = new URL(m.url); $('fav').src = u.origin + '/favicon.ico'; } catch (e) {}
+    const sess = $('sess'); sess.textContent = m.session ? 'сессия: вошла (PHPSESSID)' : 'гость'; sess.className = 'sess' + (m.session ? ' on' : '');
+    $('s-ep').textContent = m.episode; $('s-step').textContent = m.step;
+    $('inline').textContent = `эпизод ${m.episode} · шаг ${m.step} · ${m.links.length} ссылок`;
+    $('status').textContent = 'смотрит на страницу — сетчатка → зрительные доли → нисходящие нейроны';
+    renderLinks(null); drawOverlay(); takeOff(); setFlyLabel('смотрит');
+    log(`страница: ${m.url.replace(/^https?:\/\/[^/]+/, '') || '/'}  (${m.links.length} ссылок)`);
+  } else if (m.t === 'decision') {
+    chosen = m.a; renderLinks(m.p); drawOverlay(); showTip(chosen);
+    if (links[chosen]) {
+      const [sx, sy] = linkScreen(links[chosen].box);
+      flyTo(s2w(sx, sy, 8), 'landed', 1.4); setFlyLabel('летит к ссылке');
+      const hid = links[chosen].box[2] <= 0 ? ' (скрытая ссылка в меню)' : '';
+      $('status').textContent = `клик: ${links[chosen].text || links[chosen].url}`;
+      log(`решение: #${chosen} ${links[chosen].text || links[chosen].url}  p=${(m.p[chosen] * 100).toFixed(1)}%${hid}`, 'act');
+    }
+  } else if (m.t === 'reward') {
+    total = m.total; $('s-ret').textContent = (total >= 0 ? '+' : '') + total.toFixed(1);
+    rewardMarks.push({ i: rateHist.length - 1, r: m.r });
+    if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(`награда ${m.r.toFixed(1)} → дофамин PPL101 (аверсивный сигнал)`, 'bad'); }
+    else { flash('rgba(94,226,154,0.25)'); log(`награда +${m.r.toFixed(1)} — новая страница`, 'ok'); }
+    if (m.done) log(`эпизод завершён, сумма ${total.toFixed(1)}`);
+  }
+};
+es.onerror = () => { $('wait').style.display = 'block'; $('wait').textContent = 'связь с симуляцией потеряна'; };
+
+// ------------------------------------------------------------------ animation loop
+const ease = s => s < 0.5 ? 2 * s * s : 1 - Math.pow(-2 * s + 2, 2) / 2;
+const tmp = new THREE.Vector3();
+function animate(now) {
+  requestAnimationFrame(animate);
+  const t = now / 1000, fs = flyState;
+  if (fs.mode === 'fly') {
+    const s = Math.min(1, (now - fs.t0) / (fs.dur * 1000)), e = ease(s);
+    fs.pos.lerpVectors(fs.from, fs.to, e); fs.pos.y += Math.sin(Math.PI * e) * 90; fs.pos.z += Math.sin(Math.PI * e) * 60;
+    tmp.copy(fs.to).sub(fs.from); tmp.y += Math.cos(Math.PI * e) * 90 * Math.PI / 2; fs.look.copy(fs.pos).add(tmp.normalize());
+    flyRoot.position.copy(fs.pos); flyRoot.lookAt(fs.look); flyRoot.rotateZ(Math.sin(Math.PI * e) * (fs.to.x > fs.from.x ? -0.35 : 0.35));
+    if (s >= 1) {
+      fs.mode = fs.after;
+      if (fs.mode === 'landed') { const b = links[chosen] && links[chosen].box; if (b) { const [rx, ry] = boxCenter(b); ripple = { t0: now, x: rx, y: ry }; } setFlyLabel('села на ссылку'); }
+    }
+  } else if (fs.mode === 'hover') {
+    fs.pos.set(fs.home.x + Math.sin(t * 0.7) * 22, fs.home.y + Math.sin(t * 1.9) * 9, 20 + Math.cos(t * 0.5) * 15);
+    fs.look.set(fs.pos.x + Math.sin(t * 0.45) * 0.6, fs.pos.y - 0.25, fs.pos.z + 1);
+    flyRoot.position.copy(fs.pos); flyRoot.lookAt(fs.look);
+  } else if (fs.mode === 'landed') {
+    flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t * 14) * 0.6;
+    flyRoot.quaternion.slerp(landedQ, 0.25);
+  }
+  const flap = fs.mode === 'landed' ? 0 : Math.sin(t * 95) * 0.6 - 0.15;
+  fly.wings.forEach(w => { w.pivot.rotation.z = w.s * flap; });
+  if (ripple) drawOverlay();
+  if (points) {
+    updateColors(); if (dopaFlash > 0) dopaFlash = Math.max(0, dopaFlash - 0.02);
+    if (!spin.drag && ++spin.idle > 60) spin.y += 0.0025;
+    brainGroup.rotation.set(spin.x, spin.y, 0);
+  }
+  renderer.render(scene, camera);
+}
+resize(); loadBrain(); requestAnimationFrame(animate);
+</script>
+</body>
+</html>

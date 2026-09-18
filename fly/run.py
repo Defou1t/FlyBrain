@@ -1,0 +1,79 @@
+"""CLI.  python -m fly.run --synthetic --episodes 3 --headed --viz"""
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+import time
+
+import numpy as np
+
+from . import connectome
+from .agent import run_episode
+from .brain import LIF
+from .browser import SESSION_FILE, START, WebEnv, load_session_cookie
+from .motor import Readout
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--synthetic", action="store_true", help="random 20k-neuron brain instead of MaleCNS")
+    ap.add_argument("--episodes", type=int, default=1)
+    ap.add_argument("--steps", type=int, default=8, help="clicks per episode")
+    ap.add_argument("--ticks", type=int, default=96, help="LIF ticks per decision")
+    ap.add_argument("--headed", action="store_true", help="show the browser window")
+    ap.add_argument("--no-train", action="store_true")
+    ap.add_argument("--start", default=START)
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--viz", action="store_true", help="open the live 3-D visualiser (slows the sim to real time)")
+    ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--no-open", action="store_true", help="do not open the visualiser in a browser tab")
+    ap.add_argument("--pace", type=float, default=2.5, help="seconds to wait after a decision (viz only)")
+    ap.add_argument("--session-file", default=SESSION_FILE,
+                    help="file with the PHPSESSID cookie value (or set $FLY_PHPSESSID); the fly browses logged in")
+    args = ap.parse_args()
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+    t0 = time.time()
+    brain = connectome.synthetic(seed=args.seed) if args.synthetic else connectome.load()
+    print(f"brain: {brain.n:,} neurons, {brain.W.nnz:,} synapses, retina L/R "
+          f"{int((brain.retina_L >= 0).sum())}/{int((brain.retina_R >= 0).sum())} photoreceptors, "
+          f"readout {brain.readout.size} DN+motor ({time.time() - t0:.1f}s)")
+
+    sim = LIF(brain, seed=args.seed)
+    print("warming up ...", end=" ", flush=True)
+    t0 = time.time()
+    sim.run(200)
+    print(f"baseline rate {sim.firing_rate():.3f} ({(time.time() - t0) / 200 * 1000:.1f} ms/tick)")
+
+    viz = None
+    if args.viz:
+        from .viz import VizServer
+        viz = VizServer(brain, port=args.port, open_browser=not args.no_open)
+        viz.wait_for_client()
+
+    cookie = load_session_cookie(args.session_file)
+    env = WebEnv(start=args.start, headless=not args.headed, max_steps=args.steps, session_cookie=cookie)
+    print("session: PHPSESSID loaded from file/env, browsing as the logged-in user" if cookie else "session: guest")
+    ckpt = os.path.join(connectome.DATA, "readout_synthetic.npz" if args.synthetic else "readout.npz")
+    readout = Readout(brain.readout.size, env.max_actions, seed=args.seed, path=ckpt)
+    rng = np.random.default_rng(args.seed)
+    try:
+        for ep in range(args.episodes):
+            print(f"episode {ep + 1}/{args.episodes}")
+            total = run_episode(brain, sim, readout, env, rng, ticks=args.ticks, train=not args.no_train,
+                                viz=viz, episode=ep + 1, pace=args.pace)
+            print(f"  return {total:+.1f}, unique pages {len(env.visited)}")
+    finally:
+        env.close()
+    if viz:
+        print("episodes done; visualiser still up — Ctrl+C to exit")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
+
+
+if __name__ == "__main__":
+    main()

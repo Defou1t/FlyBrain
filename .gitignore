@@ -1,0 +1,9 @@
+# big MaleCNS downloads and derived caches
+data/*.feather
+data/brain.npz
+data/readout*.npz
+# session cookie - never commit
+data/session.txt
+.env
+__pycache__/
+*.pyc
