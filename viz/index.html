@@ -212,8 +212,8 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setClearColor(0x000000, 0);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(40, 1, 10, 20000);
-scene.add(new THREE.AmbientLight(0x9aa6cc, 0.8));
-const key = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set(-300, 500, 800); scene.add(key);
+scene.add(new THREE.HemisphereLight(0xc6d2ff, 0x2a1f16, 0.95));
+const key = new THREE.DirectionalLight(0xfff1dc, 0.9); key.position.set(-300, 500, 800); scene.add(key);
 const fill = new THREE.DirectionalLight(0x57d6ff, 0.35); fill.position.set(400, -200, 300); scene.add(fill);
 let W = 1, H = 1;
 function resize() {
@@ -345,45 +345,58 @@ const envMap = (() => {   // small procedural sky/ground cubemap so chitin and w
   }
   const t = new THREE.CubeTexture(faces); t.needsUpdate = true; return t;
 })();
-const MAT = {
-  thorax: new THREE.MeshPhysicalMaterial({ color: 0xb8733e, roughness: 0.45, metalness: 0.05, clearcoat: 0.6, clearcoatRoughness: 0.35, envMap, envMapIntensity: 0.7 }),
-  body:   new THREE.MeshPhysicalMaterial({ color: 0xc9953f, roughness: 0.5, metalness: 0.05, clearcoat: 0.5, clearcoatRoughness: 0.4, envMap, envMapIntensity: 0.6 }),
-  eyes:   new THREE.MeshPhysicalMaterial({ color: 0xd8232e, emissive: 0x4a0608, roughness: 0.18, metalness: 0.1, clearcoat: 1.0, clearcoatRoughness: 0.08, envMap, envMapIntensity: 1.2 }),
-  wing:   new THREE.MeshPhysicalMaterial({ color: 0xdff2ff, transparent: true, opacity: 0.42, roughness: 0.12, metalness: 0.15, side: THREE.DoubleSide, depthWrite: false, envMap, envMapIntensity: 1.4 }),
-  legs:   new THREE.MeshStandardMaterial({ color: 0x4a3826, roughness: 0.75, metalness: 0.05 }),
+const MAT = {   // chitin: mostly rough with a faint sheen (not a glossy plastic toy); eyes wet and glossy
+  thorax: new THREE.MeshPhysicalMaterial({ color: 0xa8683a, roughness: 0.68, metalness: 0.02, clearcoat: 0.18, clearcoatRoughness: 0.55, sheen: new THREE.Color(0x3a2a18), envMap, envMapIntensity: 0.45 }),
+  body:   new THREE.MeshPhysicalMaterial({ color: 0xc08f42, roughness: 0.7, metalness: 0.02, clearcoat: 0.15, clearcoatRoughness: 0.6, sheen: new THREE.Color(0x42301a), envMap, envMapIntensity: 0.4 }),
+  eyes:   new THREE.MeshPhysicalMaterial({ color: 0xc41f2c, emissive: 0x3a0507, roughness: 0.22, metalness: 0.05, clearcoat: 1.0, clearcoatRoughness: 0.1, envMap, envMapIntensity: 1.0 }),
+  wing:   new THREE.MeshPhysicalMaterial({ color: 0xe6f4ff, transparent: true, opacity: 0.34, roughness: 0.1, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false, envMap, envMapIntensity: 1.3 }),
+  wingGhost: new THREE.MeshBasicMaterial({ color: 0xdfeeff, transparent: true, opacity: 0.09, side: THREE.DoubleSide, depthWrite: false }),
+  legs:   new THREE.MeshStandardMaterial({ color: 0x3f2e1f, roughness: 0.85, metalness: 0.02 }),
 };
 new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
   const model = gltf.scene;
+  let legsMesh = null, bodyMesh = null;
   model.traverse(o => {
     if (!o.isMesh) return;
     const n = o.name.toLowerCase();
     o.material = n.includes('wing') ? MAT.wing : n.includes('eye') ? MAT.eyes : n.includes('thorax') ? MAT.thorax : n.includes('leg') ? MAT.legs : MAT.body;
     if (n.includes('wing')) fly.wings.push({ mesh: o, s: n.startsWith('l') ? -1 : 1 });
+    if (n.includes('leg')) legsMesh = o;
+    if (n === 'body') bodyMesh = o;
   });
   model.updateMatrixWorld(true);
-  // hinge each wing at its base: the wing-bbox corner closest to the thorax centre
   const thorax = model.getObjectByName('thorax'), tc = new THREE.Vector3();
   if (thorax) new THREE.Box3().setFromObject(thorax).getCenter(tc);
+  // wings: hinge at the base + two faint ghost copies at other phases = motion blur of a 200 Hz wingbeat
   fly.wings = fly.wings.map(({ mesh, s }) => {
     const bb = new THREE.Box3().setFromObject(mesh);
-    const hinge = new THREE.Vector3(s < 0 ? bb.max.x : bb.min.x, bb.max.y, bb.max.z);   // inner-top-front corner
+    const hinge = new THREE.Vector3(s < 0 ? bb.max.x : bb.min.x, bb.max.y, bb.max.z);
     hinge.x = tc.x + s * 0.12; hinge.y = Math.min(hinge.y, tc.y + 0.25);
     const pivot = new THREE.Group(); pivot.position.copy(hinge); model.add(pivot); pivot.attach(mesh);
-    return { pivot, s, mesh };
+    const ghosts = [-1.1, 1.1].map(ph => { const g = new THREE.Group(); g.position.copy(hinge); model.add(g); const m = new THREE.Mesh(mesh.geometry, MAT.wingGhost); m.position.copy(mesh.position); m.quaternion.copy(mesh.quaternion); m.scale.copy(mesh.scale); m.visible = false; g.add(m); return { pivot: g, ph, mesh: m }; });
+    return { pivot, s, mesh, ghosts };
   });
+  // legs: hinge at the thorax so they tuck back in flight and scurry when walking
+  if (legsMesh) { const lp = new THREE.Group(); lp.position.copy(tc); model.add(lp); lp.attach(legsMesh); fly.legs = lp; }
+  fly.body = bodyMesh;
   const box = new THREE.Box3().setFromObject(model), c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
   model.position.sub(c);
   fly.len = Math.max(size.x, size.y, size.z); fly.model = model; flyRoot.add(model); fly.ready = true;
   layout();
 }, undefined, err => { console.warn('drosophila.glb failed, using placeholder', err); const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), MAT.body); m.scale.set(1, 0.8, 1.6); flyRoot.add(m); fly.len = 3.2; fly.ready = true; layout(); });
 
-const flyState = { mode: 'hover', pos: new THREE.Vector3(), home: new THREE.Vector3(), from: null, to: null, t0: 0, dur: 1.3, after: 'hover', look: new THREE.Vector3() };
+// Flight is a damped spring towards a target (with a way-point above the midpoint for an arc) plus low
+// noise, so every trip is a slightly different curve; the body banks and pitches with its velocity.
+const flyState = { mode: 'hover', pos: new THREE.Vector3(), home: new THREE.Vector3(), vel: new THREE.Vector3(), target: new THREE.Vector3(),
+                   waypoint: null, after: 'hover', walk: false, landedAt: 0, heading: new THREE.Vector3(0, 0, 1), phase: 0 };
 const landedQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI)
   .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));   // back to the camera, head up the page
+const noise = (t, a, b) => Math.sin(t * a) * 0.6 + Math.sin(t * b + 1.7) * 0.4;   // cheap smooth noise in [-1, 1]
 function flyTo(target, after, dur) {
-  const walking = flyCtl.anim === 'walk';
-  flyState.from = flyState.pos.clone(); flyState.to = target; flyState.t0 = performance.now(); flyState.dur = walking ? dur * 1.8 : dur;
-  flyState.mode = 'fly'; flyState.walk = walking; flyState.after = (after === 'hover' && walking) ? 'walk' : after;
+  const fs = flyState, walking = flyCtl.anim === 'walk';
+  fs.target.copy(target); fs.mode = 'fly'; fs.walk = walking; fs.after = (after === 'hover' && walking) ? 'walk' : after;
+  const d = target.clone().sub(fs.pos);
+  fs.waypoint = (!walking && d.length() > 250) ? fs.pos.clone().addScaledVector(d, 0.45).add(new THREE.Vector3(0, 60 + d.length() * 0.18, 90)) : null;
 }
 function takeOff() { if (flyState.mode === 'landed') flyTo(flyState.home.clone(), 'hover', 1.0); }
 
@@ -573,6 +586,8 @@ es.onmessage = ev => {
     if (m.done) log(`эпизод завершён, сумма ${total.toFixed(1)}`);
   } else if (m.t === 'public') {
     if (window.showRemote) showRemote(m.on, m.lan_url, m.tunnel_url);
+  } else if (m.t === 'frame') {
+    $('shot').src = 'data:image/jpeg;base64,' + m.jpg;
   } else if (m.t === 'reload') {
     location.reload();
   } else if (m.t === 'state') {
@@ -585,47 +600,95 @@ es.onerror = () => { lost = true; $('wait').style.display = 'block'; $('wait').t
 es.onopen = () => { if (lost) location.reload(); };
 
 // ------------------------------------------------------------------ animation loop
-const ease = s => s < 0.5 ? 2 * s * s : 1 - Math.pow(-2 * s + 2, 2) / 2;
-const tmp = new THREE.Vector3(), qA = new THREE.Quaternion(), qB = new THREE.Quaternion();
-const AX_Y = new THREE.Vector3(0, 1, 0), AX_Z = new THREE.Vector3(0, 0, 1);
+const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), qA = new THREE.Quaternion(), qB = new THREE.Quaternion(), qC = new THREE.Quaternion(), qTarget = new THREE.Quaternion();
+const AX_X = new THREE.Vector3(1, 0, 0), AX_Y = new THREE.Vector3(0, 1, 0), AX_Z = new THREE.Vector3(0, 0, 1);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+let lastNow = 0;
+function steer(fs, target, dt, k, damp, maxSpeed) {   // damped spring: acceleration towards target
+  tmp.copy(target).sub(fs.pos).multiplyScalar(k).addScaledVector(fs.vel, -damp);
+  fs.vel.addScaledVector(tmp, dt);
+  const sp = fs.vel.length(); if (sp > maxSpeed) fs.vel.multiplyScalar(maxSpeed / sp);
+  fs.pos.addScaledVector(fs.vel, dt);
+}
+function orientFlying(fs, dt) {   // nose along the velocity, bank into turns, pitch with climbs; smoothed
+  if (fs.vel.length() > 25) fs.heading.lerp(tmp2.copy(fs.vel).normalize(), Math.min(1, dt * 6)).normalize();
+  tmp.copy(fs.pos).add(fs.heading);
+  flyRoot.position.copy(fs.pos); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp);
+  flyRoot.rotateZ(clamp(-fs.vel.x * 0.0012, -0.55, 0.55)); flyRoot.rotateX(clamp(-fs.vel.y * 0.0006, -0.35, 0.35));
+  flyRoot.rotateX(0.35);   // a hovering fly hangs nose-up
+  qA.copy(flyRoot.quaternion); flyRoot.quaternion.copy(qTarget).slerp(qA, Math.min(1, dt * 9));
+}
 function animate(now) {
   requestAnimationFrame(animate);
-  const t = now / 1000, fs = flyState;
+  const t = now / 1000, dt = Math.min(0.05, (now - lastNow) / 1000 || 0.016), fs = flyState; lastNow = now;
+  let grounded = false, landing = 0, walking = false;
   if (fs.mode === 'fly') {
-    const s = Math.min(1, (now - fs.t0) / (fs.dur * 1000)), e = fs.walk ? s : ease(s);
-    fs.pos.lerpVectors(fs.from, fs.to, e);
-    if (fs.walk) {   // walking: straight line over the screen, a little waddle, wings folded
-      fs.pos.y += Math.sin(s * 40) * 2; tmp.copy(fs.to).sub(fs.from); fs.look.copy(fs.pos).add(tmp.normalize());
-      flyRoot.position.copy(fs.pos); flyRoot.quaternion.slerp(landedQ, 0.2);
-      flyRoot.rotateZ(Math.atan2(tmp.y, tmp.x) - Math.PI / 2);   // head towards the walking direction
+    if (fs.walk) {   // walking: straight line over the screen, seen from above, quick little steps
+      walking = grounded = true;
+      steer(fs, fs.target, dt, 9, 6.5, 260);
+      tmp.copy(fs.target).sub(fs.pos);
+      const dist = tmp.length();
+      fs.pos.z = 4;
+      qTarget.copy(landedQ); flyRoot.position.copy(fs.pos);
+      if (dist > 6) { qB.setFromAxisAngle(AX_Z, Math.atan2(tmp.y, tmp.x) - Math.PI / 2); qTarget.copy(qB).multiply(landedQ); }
+      flyRoot.quaternion.slerp(qTarget, Math.min(1, dt * 8));
+      fs.phase += fs.vel.length() * dt * 0.09;
+      if (dist < 6 && fs.vel.length() < 40) { fs.mode = fs.after; fs.vel.set(0, 0, 0); }
     } else {
-      fs.pos.y += Math.sin(Math.PI * e) * 90; fs.pos.z += Math.sin(Math.PI * e) * 60;
-      tmp.copy(fs.to).sub(fs.from); tmp.y += Math.cos(Math.PI * e) * 90 * Math.PI / 2; fs.look.copy(fs.pos).add(tmp.normalize());
-      flyRoot.position.copy(fs.pos); flyRoot.lookAt(fs.look); flyRoot.rotateZ(Math.sin(Math.PI * e) * (fs.to.x > fs.from.x ? -0.35 : 0.35));
+      const goal = fs.waypoint || fs.target;
+      steer(fs, goal, dt, fs.waypoint ? 10 : 16, fs.waypoint ? 4.5 : 7.5, 1500);
+      fs.vel.x += noise(t, 3.1, 7.7) * 90 * dt; fs.vel.y += noise(t + 5, 2.3, 6.1) * 90 * dt;   // gusts
+      if (fs.waypoint && fs.pos.distanceTo(fs.waypoint) < 70) fs.waypoint = null;
+      orientFlying(fs, dt);
+      const dist = fs.pos.distanceTo(fs.target);
+      if (!fs.waypoint && dist < 5 && fs.vel.length() < 60) { fs.mode = fs.after; fs.vel.set(0, 0, 0); fs.pos.copy(fs.target); fs.landedAt = now; }
     }
-    if (s >= 1) {
-      fs.mode = fs.after;
-      if (fs.mode === 'landed') { const b = links[chosen] && links[chosen].box; if (b) { const [rx, ry] = boxCenter(b); ripple = { t0: now, x: rx, y: ry }; } setFlyLabel('села на ссылку'); }
-    }
+    if (fs.mode === 'landed') { const b = links[chosen] && links[chosen].box; if (b) { const [rx, ry] = boxCenter(b); ripple = { t0: now, x: rx, y: ry }; } setFlyLabel('села на ссылку'); }
   } else if (fs.mode === 'hover') {
     if (flyCtl.anim === 'walk') fs.mode = 'walk';
-    fs.pos.set(fs.home.x + Math.sin(t * 0.7) * 22, fs.home.y + Math.sin(t * 1.9) * 9, 20 + Math.cos(t * 0.5) * 15);
-    fs.look.set(fs.pos.x + Math.sin(t * 0.45) * 0.6, fs.pos.y - 0.25, fs.pos.z + 1);
-    flyRoot.position.copy(fs.pos); flyRoot.lookAt(fs.look);
-  } else if (fs.mode === 'walk') {   // grounded at home: paces slowly left-right, seen from above
-    if (flyCtl.anim !== 'walk') fs.mode = 'hover';
-    const wx = Math.sin(t * 0.35) * 60;
-    fs.pos.set(fs.home.x + wx, fs.home.y - 30 + Math.sin(t * 6) * 1.2, 4);
-    flyRoot.position.copy(fs.pos); flyRoot.quaternion.slerp(landedQ, 0.15); flyRoot.rotateZ(Math.cos(t * 0.35) > 0 ? -Math.PI / 2 : Math.PI / 2);
+    // drifting hover around home: a wandering target, spring-followed, so the body keeps tilting naturally
+    tmp2.set(fs.home.x + noise(t * 0.5, 1.0, 2.6) * 40, fs.home.y + noise(t * 0.5 + 9, 1.7, 3.9) * 22, 22 + noise(t * 0.4 + 3, 1.3, 2.9) * 18);
+    steer(fs, tmp2, dt, 6, 3.2, 400);
+    fs.vel.x += noise(t, 4.3, 9.1) * 40 * dt; fs.vel.y += noise(t + 2, 5.1, 8.3) * 60 * dt;
+    orientFlying(fs, dt);
+  } else if (fs.mode === 'walk') {   // grounded at home: wanders a little, turns to where it goes
+    if (flyCtl.anim !== 'walk') { fs.mode = 'hover'; }
+    walking = grounded = true;
+    if (!fs.walkGoal || fs.pos.distanceTo(fs.walkGoal) < 8 || t > (fs.walkUntil || 0)) {
+      fs.walkGoal = new THREE.Vector3(fs.home.x + (Math.random() - 0.5) * 160, fs.home.y - 30 + (Math.random() - 0.5) * 40, 4); fs.walkUntil = t + 2 + Math.random() * 3;
+    }
+    const resting = t % 7 < 2.5;   // stops now and then, grooming pause
+    steer(fs, resting ? fs.pos : fs.walkGoal, dt, 7, 6, 120); fs.pos.z = 4;
+    tmp.copy(fs.walkGoal).sub(fs.pos);
+    qTarget.copy(landedQ); if (tmp.length() > 6 && !resting) { qB.setFromAxisAngle(AX_Z, Math.atan2(tmp.y, tmp.x) - Math.PI / 2); qTarget.copy(qB).multiply(landedQ); }
+    flyRoot.position.copy(fs.pos); flyRoot.quaternion.slerp(qTarget, Math.min(1, dt * 6));
+    fs.phase += fs.vel.length() * dt * 0.09;
   } else if (fs.mode === 'landed') {
-    flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t * 14) * 0.6;
-    flyRoot.quaternion.slerp(landedQ, 0.25);
+    grounded = true;
+    landing = clamp(1 - (now - fs.landedAt) / 350, 0, 1);            // touchdown squash
+    flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t * 9) * 0.4;
+    flyRoot.quaternion.slerp(landedQ, Math.min(1, dt * 10));
   }
-  // wings: folded over the back when landed or walking, spread sideways and beating in the air
-  const grounded = fs.mode === 'landed' || fs.mode === 'walk' || (fs.mode === 'fly' && fs.walk);
-  fly.spread = (fly.spread || 0) + ((grounded ? 0 : 1.25) - (fly.spread || 0)) * 0.12;
-  const flap = grounded ? 0 : Math.sin(t * 95) * 0.55 * Math.min(1, fly.spread);
-  fly.wings.forEach(w => { qA.setFromAxisAngle(AX_Z, w.s * flap); qB.setFromAxisAngle(AX_Y, -w.s * fly.spread); w.pivot.quaternion.copy(qA).multiply(qB); });
+  // body: touchdown squash + breathing abdomen; legs tucked in flight, stepping when walking
+  const squash = 1 - 0.18 * Math.sin(Math.PI * landing);
+  if (fly.model) fly.model.scale.set(1 + 0.08 * (1 - squash), squash, 1 + 0.06 * (1 - squash));
+  if (fly.body) { const br = 1 + 0.02 * Math.sin(t * 5.2); fly.body.scale.set(1, br, 1); }
+  if (fly.legs) {
+    const tuck = (fly.tuck = (fly.tuck || 0) + ((grounded ? 0 : 1) - (fly.tuck || 0)) * Math.min(1, dt * 8));
+    qA.setFromAxisAngle(AX_X, 0.55 * tuck); qB.setFromAxisAngle(AX_Y, walking ? Math.sin(fs.phase * 2.2) * 0.07 : 0);
+    fly.legs.quaternion.copy(qA).multiply(qB);
+  }
+  // wings: folded over the back when grounded; spread and beating in the air, feathering on each stroke,
+  // faint ghost copies at other phases so the beat reads as a blur
+  fly.spread = (fly.spread || 0) + ((grounded ? 0 : 1.25) - (fly.spread || 0)) * Math.min(1, dt * 7);
+  const beat = t * 88 + Math.sin(t * 3) * 0.6, amp = grounded ? 0 : (0.5 + 0.08 * Math.sin(t * 2.7)) * Math.min(1, fly.spread);
+  fly.wings.forEach(w => {
+    const set = (pivot, ph) => { const f = Math.sin(beat + ph) * amp, feather = Math.cos(beat + ph) * 0.3 * amp;
+      qA.setFromAxisAngle(AX_Z, w.s * f); qB.setFromAxisAngle(AX_Y, -w.s * fly.spread); qC.setFromAxisAngle(AX_X, feather);
+      pivot.quaternion.copy(qA).multiply(qB).multiply(qC); };
+    set(w.pivot, 0);
+    w.ghosts.forEach(g => { g.mesh.visible = amp > 0.05; set(g.pivot, g.ph); });
+  });
   if (ripple) drawOverlay();
   if (points) {
     updateColors(); if (dopaFlash > 0) dopaFlash = Math.max(0, dopaFlash - 0.02); if (pamFlash > 0) pamFlash = Math.max(0, pamFlash - 0.02);

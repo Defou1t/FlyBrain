@@ -84,12 +84,13 @@ def _num(s) -> float | None:
 class CasinoEnv:
     def __init__(self, game: str = DEMO_GAME, headless: bool = True, max_actions: int = 32, max_steps: int = 20,
                  viewport=(1280, 800), session_cookie: str | None = None, frame_hint: str = "amusnet",
-                 log_path: str = LOG, spin_timeout: float = 15.0, lobby: str | None = LOBBY):
+                 log_path: str = LOG, spin_timeout: float = 12.0, lobby: str | None = LOBBY):
         if "ismoney=false" not in game.lower():
             raise ValueError("casino env only runs demo games: the URL must contain isMoney=false")
         from playwright.sync_api import sync_playwright
         self.game = game
         self.lobby = lobby                           # None -> open `game` directly
+        self.on_frame = None                         # callback(jpeg bytes): live view for the visualiser
         u = urlparse(game)
         self.game_base = f"{u.scheme}://{u.netloc}{u.path}"
         self.phase = "game"
@@ -229,7 +230,7 @@ class CasinoEnv:
             if b["visible"]:
                 # wait until the transition has finished (position stable), then return fresh coordinates
                 for _ in range(8):
-                    self.page.wait_for_timeout(150)
+                    self.page.wait_for_timeout(100)
                     b2 = next((x for x in self._bet_buttons() if x["id"] == btn_id), None)
                     if b2 and abs(b2["x"] - b["x"]) < 1 and b2["visible"]:
                         return b2
@@ -244,7 +245,9 @@ class CasinoEnv:
             if not arrow:
                 return None
             self.page.mouse.click(arrow[0] + arrow[2] / 2, arrow[1] + arrow[3] / 2)   # raw click: no actionability wait
-            self.page.wait_for_timeout(650)
+            self.page.wait_for_timeout(200)
+            self._emit_frame()                       # (~0.1 s) shows the strip sliding
+            self.page.wait_for_timeout(150)
         return None
 
     def _recover(self):
@@ -270,7 +273,7 @@ class CasinoEnv:
     def _open_lobby(self) -> bool:
         try:
             self.page.goto(self.lobby, wait_until="domcontentloaded", timeout=60000)
-            self.page.wait_for_timeout(5000)
+            self.page.wait_for_timeout(3000)
             self._close_modals()
         except Exception:
             return False
@@ -284,7 +287,7 @@ class CasinoEnv:
 
     def _open_game(self, url: str):
         self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
-        self.page.wait_for_timeout(6000)
+        self.page.wait_for_timeout(4000)
         self._close_modals()
         frame = None
         for i in range(50):                          # the game client can take a while to boot
@@ -336,15 +339,26 @@ class CasinoEnv:
                 "casino": {"balance": bal if self.balance is not None else None, "bet": self.bet, "win": self.win,
                            "delta": self.delta, "cum": self.cum_reward}}
 
+    def _emit_frame(self):
+        """Push a live JPEG of the page to the visualiser (reels spinning, strip scrolling)."""
+        if self.on_frame is None:
+            return
+        try:
+            self.on_frame(self.page.screenshot(type="jpeg", quality=55))
+        except Exception:
+            pass
+
     def _wait_settle(self, before: tuple) -> tuple[tuple, bool]:
-        """Wait until the (balance, win) fields moved away from `before` and then stayed put for 2 s.
-        Returns ((balance, win), won): `won` is True if the win field changed or a win line was shown -
-        the win field keeps the last non-zero win, so a losing spin after a win still displays it."""
+        """Wait until the (balance, win) fields moved away from `before` and then stayed put for 1.2 s,
+        streaming live frames meanwhile. Returns ((balance, win), won): `won` is True if the win field
+        changed or a win line was shown - the win field keeps the last non-zero win, so a losing spin
+        after a win still displays it."""
         t0 = time.time()
         last, last_change, moved, won = before, time.time(), False, False
         frame = self.game_frame()
         while time.time() - t0 < self.spin_timeout:
-            time.sleep(0.5)
+            self._emit_frame()                                   # ~0.1 s each: this is the frame pacing
+            time.sleep(0.1)
             cur = self._read()
             if "=" in (self._dom(frame).get("info") or ""):     # "Лінія 5 4x = 0.40 FUN"
                 won = True
@@ -352,8 +366,9 @@ class CasinoEnv:
                 if cur[1] != last[1]:
                     won = True
                 last, last_change, moved = cur, time.time(), True
-            if moved and time.time() - t0 > 3.0 and time.time() - last_change > 2.0:
+            if moved and time.time() - t0 > 2.0 and time.time() - last_change > 1.2:
                 break
+        self._emit_frame()
         return last, won
 
     def step(self, action: int) -> tuple[dict, float, bool]:

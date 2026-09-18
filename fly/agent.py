@@ -53,6 +53,8 @@ class Control:
 def run_episode(brain: Brain, sim: LIF, readout: Readout, env, rng: np.random.Generator,
                 ticks: int = 96, train: bool = True, verbose: bool = True, viz=None, episode: int = 0,
                 pace: float = 2.5, control: Control | None = None) -> float:
+    if viz and hasattr(env, "on_frame"):
+        env.on_frame = viz.frame           # live frames while reels spin / the strip scrolls
     obs = env.reset()
     trajectory, rewards, last_reward = [], [], 0.0
     done = False

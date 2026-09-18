@@ -67,7 +67,7 @@ def all_ips() -> list[str]:
 
 class VizServer:
     def __init__(self, brain: Brain, port: int = 8765, max_points: int = 120_000, every: int = 4,
-                 tick_delay: float = 0.03, open_browser: bool = True, public: bool = False,
+                 tick_delay: float = 0.012, open_browser: bool = True, public: bool = False,
                  tunnel_provider: str = "lhr"):
         self.brain = brain
         self.every = every
@@ -320,6 +320,10 @@ class VizServer:
                    "session": bool(obs.get("session")), "casino": obs.get("casino"),
                    "png": base64.b64encode(obs["png"]).decode(),
                    "links": [{"url": u, "text": t, "box": b} for (u, t), b in zip(obs["links"], obs["boxes"])]})
+
+    def frame(self, jpg: bytes):
+        """Live view of the browser between observations (reels spinning, strip scrolling)."""
+        self.send({"t": "frame", "jpg": base64.b64encode(jpg).decode()}, drop_if_busy=True)
 
     def decision(self, probs: np.ndarray, action: int, rate: float):
         self.send({"t": "decision", "p": [round(float(x), 4) for x in probs], "a": int(action), "rate": rate})

@@ -26,7 +26,7 @@ def main():
     ap.add_argument("--synthetic", action="store_true", help="random 20k-neuron brain instead of MaleCNS")
     ap.add_argument("--episodes", type=int, default=1, help="0 = forever (used by fly.serve)")
     ap.add_argument("--steps", type=int, default=8, help="clicks per episode")
-    ap.add_argument("--ticks", type=int, default=96, help="LIF ticks per decision")
+    ap.add_argument("--ticks", type=int, default=48, help="LIF ticks per decision")
     ap.add_argument("--headed", action="store_true", help="show the browser window")
     ap.add_argument("--no-train", action="store_true")
     ap.add_argument("--start", default=START)
@@ -34,7 +34,7 @@ def main():
     ap.add_argument("--viz", action="store_true", help="open the live 3-D visualiser (slows the sim to real time)")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--no-open", action="store_true", help="do not open the visualiser in a browser tab")
-    ap.add_argument("--pace", type=float, default=2.5, help="seconds to wait after a decision (viz only)")
+    ap.add_argument("--pace", type=float, default=1.1, help="seconds to wait after a decision (viz only)")
     ap.add_argument("--session-file", default=SESSION_FILE,
                     help="file with the PHPSESSID cookie value (or set $FLY_PHPSESSID); the fly browses logged in")
     ap.add_argument("--casino", action="store_true", help="play a demo slot (bets = actions) instead of browsing")
