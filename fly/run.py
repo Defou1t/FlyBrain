@@ -35,6 +35,9 @@ def main():
     ap.add_argument("--game", default=None, help="demo game URL (must contain isMoney=false)")
     ap.add_argument("--public", action="store_true",
                     help="let colleagues watch the visualiser at http://<your-ip>:<port>/ (toggle in the page)")
+    ap.add_argument("--tunnel", nargs="?", const="lhr", choices=["lhr", "cloudflare"], default=None,
+                    help="also open a public https link for viewers outside the network: "
+                         "lhr = localhost.run over ssh (default), cloudflare = cloudflared quick tunnel")
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -53,7 +56,10 @@ def main():
     viz = None
     if args.viz:
         from .viz import VizServer
-        viz = VizServer(brain, port=args.port, open_browser=not args.no_open, public=args.public)
+        viz = VizServer(brain, port=args.port, open_browser=not args.no_open, public=args.public,
+                        tunnel_provider=args.tunnel or "lhr")
+        if args.tunnel:
+            viz.set_tunnel(True, args.tunnel)
         viz.wait_for_client()
 
     cookie = load_session_cookie(args.session_file)
@@ -86,6 +92,9 @@ def main():
                 time.sleep(1)
         except KeyboardInterrupt:
             pass
+        finally:
+            if viz.tunnel:
+                viz.tunnel.stop()
 
 
 if __name__ == "__main__":

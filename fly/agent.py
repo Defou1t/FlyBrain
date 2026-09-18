@@ -19,6 +19,9 @@ def run_episode(brain: Brain, sim: LIF, readout: Readout, env: WebEnv, rng: np.r
     trajectory, rewards, last_reward = [], [], 0.0
     done = False
     while not done:
+        if not obs["mask"].any():          # nothing clickable (blank / failed page): end the episode
+            print("  no actions available on this page, ending episode")
+            break
         if viz:
             viz.page(obs, env.step_i, episode)
         ext = encode(brain, obs["png"]) + dopamine(brain, last_reward)
@@ -39,7 +42,7 @@ def run_episode(brain: Brain, sim: LIF, readout: Readout, env: WebEnv, rng: np.r
             print(f"  step {env.step_i:2d} rate={sim.firing_rate():.3f} p={p[a]:.2f} r={r:+.1f} -> {url}  [{text}]")
     if viz:
         viz.page(obs, env.step_i, episode)
-    if train:
+    if train and trajectory:
         readout.update(trajectory, rewards)
         readout.save()
     return float(sum(rewards))

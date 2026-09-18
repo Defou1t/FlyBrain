@@ -67,11 +67,14 @@ def all_ips() -> list[str]:
 
 class VizServer:
     def __init__(self, brain: Brain, port: int = 8765, max_points: int = 120_000, every: int = 4,
-                 tick_delay: float = 0.03, open_browser: bool = True, public: bool = False):
+                 tick_delay: float = 0.03, open_browser: bool = True, public: bool = False,
+                 tunnel_provider: str = "lhr"):
         self.brain = brain
         self.every = every
         self.tick_delay = tick_delay
         self.public = public
+        self.tunnel = None
+        self.tunnel_provider = tunnel_provider
         self.clients: list[queue.Queue] = []
         self.lock = threading.Lock()
 
@@ -123,7 +126,9 @@ class VizServer:
                 self.wfile.write(body)
 
             def do_GET(self):
-                local = self.client_address[0] in LOCAL
+                # viewers coming through the Cloudflare tunnel connect from 127.0.0.1 but carry proxy headers
+                proxied = bool(self.headers.get("Cf-Connecting-Ip") or self.headers.get("X-Forwarded-For"))
+                local = self.client_address[0] in LOCAL and not proxied
                 if not local and not server.public:
                     return self._send("доступ выключен / remote access is off".encode(), "text/plain; charset=utf-8", 403)
                 u = urlparse(self.path)
@@ -143,16 +148,26 @@ class VizServer:
                 elif u.path == "/meta.json":
                     meta = dict(server.meta, local=local, public=server.public,
                                 lan_url=f"http://{server.lan}:{server.port}/",
-                                lan_urls=[f"http://{ip}:{server.port}/" for ip in server.ips])
+                                lan_urls=[f"http://{ip}:{server.port}/" for ip in server.ips],
+                                tunnel_url=server.tunnel_url)
                     self._send(json.dumps(meta).encode(), "application/json")
-                elif u.path == "/admin/public":
+                elif u.path in ("/admin/public", "/admin/tunnel"):
                     if not local:
                         return self._send(b"forbidden", "text/plain", 403)
                     q = parse_qs(u.query)
+                    err = None
                     if "on" in q:
-                        server.set_public(q["on"][0] in ("1", "true", "on"))
-                    self._send(json.dumps({"public": server.public, "lan_url": f"http://{server.lan}:{server.port}/"})
-                               .encode(), "application/json")
+                        on = q["on"][0] in ("1", "true", "on")
+                        if u.path == "/admin/public":
+                            server.set_public(on)
+                        else:
+                            try:
+                                server.set_tunnel(on)
+                            except Exception as e:
+                                err = str(e)
+                    self._send(json.dumps({"public": server.public, "lan_url": f"http://{server.lan}:{server.port}/",
+                                           "tunnel_url": server.tunnel_url, "error": err}).encode(),
+                               "application/json")
                 elif u.path == "/events":
                     self.send_response(200)
                     self.send_header("Content-Type", "text/event-stream")
@@ -187,10 +202,38 @@ class VizServer:
         if open_browser:
             webbrowser.open(f"http://127.0.0.1:{port}/")
 
+    @property
+    def tunnel_url(self) -> str | None:
+        return self.tunnel.url if self.tunnel and self.tunnel.alive else None
+
+    def set_tunnel(self, on: bool, provider: str | None = None):
+        """Start/stop a public tunnel (localhost.run over ssh, or cloudflared); starting also switches
+        remote access on. Viewers through the tunnel count as remote (proxy headers), never as admins."""
+        from .tunnel import Tunnel
+        if on:
+            if not self.tunnel_url:
+                if self.tunnel:
+                    self.tunnel.stop()
+                self.tunnel = Tunnel(self.port, provider or self.tunnel_provider, on_url=self._tunnel_changed)
+                url = self.tunnel.start()
+                print(f"viz: tunnel ON -> {url}   (anyone with the link can watch; new link on every start)")
+            if not self.public:
+                self.set_public(True)
+        elif self.tunnel:
+            self.tunnel.stop()
+            print("viz: tunnel off")
+        self.send({"t": "public", "on": self.public, "lan_url": f"http://{self.lan}:{self.port}/",
+                   "tunnel_url": self.tunnel_url})
+
+    def _tunnel_changed(self, url: str):
+        print(f"viz: public link -> {url}")
+        self.send({"t": "public", "on": self.public, "lan_url": f"http://{self.lan}:{self.port}/", "tunnel_url": url})
+
     def set_public(self, on: bool):
         self.public = bool(on)
         print(f"viz: remote access {'ON  -> http://%s:%d/' % (self.lan, self.port) if on else 'off'}")
-        self.send({"t": "public", "on": self.public, "lan_url": f"http://{self.lan}:{self.port}/"})
+        self.send({"t": "public", "on": self.public, "lan_url": f"http://{self.lan}:{self.port}/",
+                   "tunnel_url": self.tunnel_url})
         if not on:
             with self.lock:
                 for q in self.clients:

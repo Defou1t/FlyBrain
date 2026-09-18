@@ -116,6 +116,9 @@
       <span>доступ коллегам</span>
       <button id="pubbtn">выкл</button>
       <code id="lanurl"></code>
+      <span>· туннель</span>
+      <button id="tunbtn">выкл</button>
+      <code id="tunurl"></code>
     </div>
     <div class="credit">модель: NeuroMechFly v2 (EPFL, Apache-2.0) · перетаскивание — вращать мозг</div>
   </aside>
@@ -261,11 +264,21 @@ function updateColors() {
 // ------------------------------------------------------------------ remote viewing toggle (localhost only)
 function setupRemote(meta) {
   if (!meta.local) return;
-  const box = $('remote'), btn = $('pubbtn'), url = $('lanurl');
+  const box = $('remote'), btn = $('pubbtn'), url = $('lanurl'), tbtn = $('tunbtn'), turl = $('tunurl');
   box.style.display = 'flex';
-  const show = (on, lan) => { btn.textContent = on ? 'вкл' : 'выкл'; btn.className = on ? 'on' : ''; url.textContent = on ? (meta.lan_urls || [lan]).join('  ') : ''; };
-  show(meta.public, meta.lan_url);
-  btn.onclick = async () => { const r = await (await fetch('/admin/public?on=' + (btn.className === 'on' ? 0 : 1))).json(); show(r.public, r.lan_url); log(r.public ? `доступ коллегам включён: ${r.lan_url}` : 'доступ коллегам выключен'); };
+  const show = (on, lan, tun) => {
+    btn.textContent = on ? 'вкл' : 'выкл'; btn.className = on ? 'on' : ''; url.textContent = on ? (meta.lan_urls || [lan]).join('  ') : '';
+    tbtn.textContent = tun ? 'вкл' : 'выкл'; tbtn.className = tun ? 'on' : ''; turl.textContent = tun || '';
+  };
+  window.showRemote = show;
+  show(meta.public, meta.lan_url, meta.tunnel_url);
+  btn.onclick = async () => { const r = await (await fetch('/admin/public?on=' + (btn.className === 'on' ? 0 : 1))).json(); show(r.public, r.lan_url, r.tunnel_url); log(r.public ? `доступ коллегам включён: ${r.lan_url}` : 'доступ коллегам выключен'); };
+  tbtn.onclick = async () => {
+    const on = tbtn.className !== 'on'; tbtn.textContent = on ? '…' : 'выкл';
+    const r = await (await fetch('/admin/tunnel?on=' + (on ? 1 : 0))).json();
+    show(r.public, r.lan_url, r.tunnel_url);
+    log(r.error ? `туннель: ${r.error}` : r.tunnel_url ? `туннель открыт: ${r.tunnel_url}` : 'туннель закрыт', r.error ? 'bad' : '');
+  };
 }
 const pad = $('dragpad');
 pad.addEventListener('pointerdown', e => { spin.drag = [e.clientX, e.clientY]; spin.idle = 0; pad.setPointerCapture(e.pointerId); });
@@ -515,7 +528,7 @@ es.onmessage = ev => {
     else { pamFlash = 1; flash('rgba(94,226,154,0.25)'); log(`награда +${m.r.toFixed(1)} — новая страница → PAM`, 'ok'); }
     if (m.done) log(`эпизод завершён, сумма ${total.toFixed(1)}`);
   } else if (m.t === 'public') {
-    const btn = $('pubbtn'); if (btn) { btn.textContent = m.on ? 'вкл' : 'выкл'; btn.className = m.on ? 'on' : ''; $('lanurl').textContent = m.on ? m.lan_url : ''; }
+    if (window.showRemote) showRemote(m.on, m.lan_url, m.tunnel_url);
   }
 };
 es.onerror = () => { $('wait').style.display = 'block'; $('wait').textContent = 'связь с симуляцией потеряна'; };
