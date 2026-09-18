@@ -26,15 +26,19 @@ class Readout:
     def _norm(x: np.ndarray) -> np.ndarray:
         return (x - x.mean()) / (x.std() + 1e-6)
 
-    def policy(self, counts: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    def policy(self, counts: np.ndarray, mask: np.ndarray, prior: np.ndarray | None = None) -> np.ndarray:
         x = self._norm(counts)
         logits = x @ self.W + self.b
+        if prior is not None and len(prior):            # drive / appetite bias (log-prior over actions)
+            logits = logits.copy()
+            logits[: len(prior)] += prior
         logits = np.where(mask, logits, -1e9)
         p = np.exp(logits - logits.max())
         return p / p.sum()
 
-    def act(self, counts: np.ndarray, mask: np.ndarray, rng: np.random.Generator) -> tuple[int, np.ndarray]:
-        p = self.policy(counts, mask)
+    def act(self, counts: np.ndarray, mask: np.ndarray, rng: np.random.Generator,
+            prior: np.ndarray | None = None) -> tuple[int, np.ndarray]:
+        p = self.policy(counts, mask, prior)
         return int(rng.choice(len(p), p=p)), p
 
     def update(self, trajectory: list[tuple[np.ndarray, np.ndarray, int, np.ndarray]], rewards: list[float],

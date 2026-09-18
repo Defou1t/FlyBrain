@@ -28,7 +28,8 @@ from urllib.parse import urlparse
 
 import numpy as np
 
-from .browser import SESSION_FILE, load_session_cookie
+from .browser import SESSION_FILE, load_session_cookie, start_screencast
+from .drive import Drive
 
 DEMO_GAME = "https://betking.com.ua/casino/?game=olympus-glory-buy-bonus&isMoney=false"
 LOBBY = "https://betking.com.ua/games/top-provider-games-amusnet/"   # Amusnet slots: the only client we can drive
@@ -90,7 +91,12 @@ class CasinoEnv:
         from playwright.sync_api import sync_playwright
         self.game = game
         self.lobby = lobby                           # None -> open `game` directly
-        self.on_frame = None                         # callback(jpeg bytes): live view for the visualiser
+        self._on_frame = None                        # callback(jpeg bytes): live view for the visualiser
+        self._cast = None
+        self.drive = Drive()                         # appetite, stake pattern, lucky/unlucky slots, events
+        self.cur_slug, self.cur_name = None, ""
+        self.rest = False                            # set when the fly has lost its appetite: take a walk
+        self.new_events: list[dict] = []
         u = urlparse(game)
         self.game_base = f"{u.scheme}://{u.netloc}{u.path}"
         self.phase = "game"
@@ -245,9 +251,7 @@ class CasinoEnv:
             if not arrow:
                 return None
             self.page.mouse.click(arrow[0] + arrow[2] / 2, arrow[1] + arrow[3] / 2)   # raw click: no actionability wait
-            self.page.wait_for_timeout(200)
-            self._emit_frame()                       # (~0.1 s) shows the strip sliding
-            self.page.wait_for_timeout(150)
+            self.page.wait_for_timeout(350)
         return None
 
     def _recover(self):
@@ -308,10 +312,45 @@ class CasinoEnv:
     def reset(self) -> dict:
         self.episode += 1
         self.step_i = 0
+        self.rest = False
+        if self.phase == "game" and self.cur_slug and self.drive.wants_switch():
+            self.drive.close_slot(self.drive.reason)
+            print(f"casino: leaving '{self.cur_name}' ({self.drive.reason}), looking for another slot")
         if self.lobby and self._open_lobby():        # phase 1: pick a slot from the Amusnet list
             return self._observe()
         self._open_game(self.game)
+        self._register_slot(self.game)
         return self._observe()
+
+    def _register_slot(self, url: str, name: str | None = None):
+        m = re.search(r"game=([^&]+)", url)
+        self.cur_slug = m.group(1) if m else url
+        self.cur_name = name or self.cur_slug
+        self.drive.open_slot(self.cur_slug, self.cur_name, self.balance)
+
+    @property
+    def on_frame(self):
+        return self._on_frame
+
+    @on_frame.setter
+    def on_frame(self, cb):
+        """Set by the agent when a visualiser is attached: starts Chromium's screencast (live reels)."""
+        self._on_frame = cb
+        if cb and self._cast is None:
+            try:
+                self._cast = start_screencast(self.context, self.page, lambda jpg: self._on_frame and self._on_frame(jpg))
+            except Exception as e:
+                print(f"casino: screencast unavailable ({str(e)[:80]})")
+
+    def idle(self, seconds: float):
+        """Sleep while still pumping browser events (live frames keep flowing)."""
+        self.page.wait_for_timeout(seconds * 1000)
+
+    def action_prior(self) -> np.ndarray | None:
+        """Log-prior for the readout: wanted stake size in the game, lucky/unlucky slots in the lobby."""
+        if self.phase == "lobby":
+            return self.drive.lobby_prior([c["slug"] for c in self._cards])
+        return self.drive.bet_prior([b["value"] for b in self._buttons])
 
     def _observe(self) -> dict:
         if self.phase == "lobby":
@@ -320,7 +359,8 @@ class CasinoEnv:
             return {"png": self.page.screenshot(type="png"), "mask": mask, "url": self.page.url,
                     "links": self.links, "boxes": self.boxes, "title": "вибір слота", "session": self.session,
                     "casino": {"balance": self.balance, "bet": None, "win": None, "delta": 0.0,
-                               "cum": self.cum_reward, "phase": "lobby"}}
+                               "cum": self.cum_reward, "phase": "lobby", "drive": self.drive.snapshot(),
+                               "events": []}}
         self._buttons = self._bet_buttons()[: self.max_actions]
         self.links = [(f"bet:{b['value']:.2f}", f"ставка {b['value']:.2f} FUN") for b in self._buttons]
         right = self._arrow_box("right") or [0, 0, 0, 0]
@@ -337,16 +377,8 @@ class CasinoEnv:
         return {"png": self.page.screenshot(type="png"), "mask": mask, "url": self.page.url, "links": self.links,
                 "boxes": self.boxes, "title": title, "session": self.session,
                 "casino": {"balance": bal if self.balance is not None else None, "bet": self.bet, "win": self.win,
-                           "delta": self.delta, "cum": self.cum_reward}}
-
-    def _emit_frame(self):
-        """Push a live JPEG of the page to the visualiser (reels spinning, strip scrolling)."""
-        if self.on_frame is None:
-            return
-        try:
-            self.on_frame(self.page.screenshot(type="jpeg", quality=55))
-        except Exception:
-            pass
+                           "delta": self.delta, "cum": self.cum_reward, "phase": "game",
+                           "drive": self.drive.snapshot(), "events": self.new_events}}
 
     def _wait_settle(self, before: tuple) -> tuple[tuple, bool]:
         """Wait until the (balance, win) fields moved away from `before` and then stayed put for 1.2 s,
@@ -357,8 +389,7 @@ class CasinoEnv:
         last, last_change, moved, won = before, time.time(), False, False
         frame = self.game_frame()
         while time.time() - t0 < self.spin_timeout:
-            self._emit_frame()                                   # ~0.1 s each: this is the frame pacing
-            time.sleep(0.1)
+            self.page.wait_for_timeout(120)                      # pumps screencast frames meanwhile
             cur = self._read()
             if "=" in (self._dom(frame).get("info") or ""):     # "Лінія 5 4x = 0.40 FUN"
                 won = True
@@ -368,7 +399,6 @@ class CasinoEnv:
                 last, last_change, moved = cur, time.time(), True
             if moved and time.time() - t0 > 2.0 and time.time() - last_change > 1.2:
                 break
-        self._emit_frame()
         return last, won
 
     def step(self, action: int) -> tuple[dict, float, bool]:
@@ -379,9 +409,11 @@ class CasinoEnv:
             print(f"casino: opening slot '{card['name']}' in demo mode")
             try:
                 self._open_game(url)
+                self._register_slot(url, card["name"])
             except Exception as e:                   # not an Amusnet client / no FUN currency: fall back
                 print(f"casino: {card['name']} not playable here ({str(e)[:80]}), falling back to the default slot")
                 self._open_game(self.game)
+                self._register_slot(self.game)
             return self._observe(), 0.0, False
         frame = self.game_frame()
         self._demo_check(frame)
@@ -413,9 +445,14 @@ class CasinoEnv:
             csv.writer(f).writerow([f"{time.time():.1f}", self.episode, self.step_i, self.links[action][0], self.bet,
                                     before[0], after[0], f"{win:.2f}", f"{self.delta:.2f}", f"{reward:.3f}",
                                     f"{max(reward, 0):.3f}", f"{max(-reward, 0):.3f}", f"{self.cum_reward:.3f}"])
+        self.new_events = self.drive.spin(self.bet, win, reward, (self.balance or 0.0) + win)
         obs = self._observe()
         broke = self.balance is not None and self.balance + win < self.bet
-        done = self.step_i >= self.max_steps or broke
+        switch = self.drive.wants_switch()
+        self.rest = self.drive.wants_rest()
+        if self.rest:
+            print(f"casino: appetite is gone (desire {self.drive.desire:.2f}) - the fly goes for a walk")
+        done = self.step_i >= self.max_steps or broke or switch or self.rest
         return obs, reward, done
 
     def close(self):

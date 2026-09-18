@@ -9,3 +9,5 @@ __pycache__/
 *.pyc
 data/casino_probe.json
 data/dopamine*.csv
+data/drive.json
+data/events.jsonl

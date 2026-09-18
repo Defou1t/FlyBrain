@@ -30,6 +30,14 @@
   #gear button.on { color:var(--acc); border-color:#5a4520; }
   #gl.hit { pointer-events:auto; cursor:pointer; }
   #casino { display:none; }
+  #drive { margin-top:6px; }
+  #drive .muted { font-size:11px; color:var(--dim); margin:4px 0; }
+  #events { font-family:Consolas, monospace; font-size:10.5px; max-height:96px; overflow:auto; margin:4px 0; }
+  #events div { padding:1px 0; color:var(--dim); }
+  #events .goal { color:var(--ok); } #events .lucky { color:#ffd93b; } #events .bust { color:var(--bad); } #events .switch { color:var(--cyan); }
+  #slots { display:grid; grid-template-columns:1fr auto auto auto; gap:1px 8px; font-size:10.5px; color:var(--dim); }
+  #slots .n { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #slots .lucky { color:#ffd93b; } #slots .unlucky { color:var(--bad); }
   #casino #ctiles { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:6px; }
   #casino #ctiles div { background:#0a0d18; border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
   #casino #ctiles b { display:block; font-size:14px; font-weight:600; }
@@ -172,6 +180,12 @@
         <div><b id="c-win">—</b><span>выигрыш</span></div>
       </div>
       <canvas id="dopa" class="wide" height="90"></canvas>
+      <div id="drive">
+        <div class="grp"><span>азарт</span><div class="b"><i id="desire-bar" style="background:linear-gradient(90deg,#ff5c7a,#ffd93b,#5ee29a)"></i></div><span class="v" id="desire-v">—</span></div>
+        <div id="slotline" class="muted"></div>
+        <div id="events"></div>
+        <div id="slots"></div>
+      </div>
     </section>
     <section>
       <h2>Активность по отделам мозга</h2>
@@ -509,11 +523,23 @@ const setFlyLabel = s => $('flylabel').innerHTML = `<b>Drosophila</b> · ${s}`;
 // ------------------------------------------------------------------ casino: balance tiles + dopamine curve
 const dopa = [];   // per spin: {r, cum}
 const fmt = v => v == null ? '—' : Number(v).toLocaleString('ru', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-function showCasino(c) {
+function showCasino(c, logEvents = false) {
   if (!c) return;
   $('casino').style.display = 'block';
   $('c-bal').textContent = fmt(c.balance); $('c-bet').textContent = fmt(c.bet); $('c-win').textContent = fmt(c.win);
   $('c-win').style.color = c.delta > 0 ? 'var(--ok)' : c.delta < 0 ? 'var(--bad)' : '';
+  if (c.drive) showDrive(c.drive);
+  if (logEvents) (c.events || []).forEach(e => log(`${EV_NAME[e.type] || e.type}: ${e.name} ${e.pct != null ? (e.pct >= 0 ? '+' : '') + e.pct + '%' : ''}`, e.type === 'bust' ? 'bad' : e.type === 'switch' ? '' : 'ok'));
+}
+const EV_NAME = { goal: '🎯 цель +15%', lucky: '🍀 удачный слот', bust: '💸 слив', switch: '↪ смена слота' };
+function showDrive(d) {
+  $('desire-bar').style.width = Math.round(d.desire * 100) + '%'; $('desire-v').textContent = Math.round(d.desire * 100) + '%';
+  const pct = d.start ? ((d.session_net / d.start) * 100).toFixed(2) : null;
+  $('slotline').textContent = d.name ? `${d.name}${d.lucky ? ' 🍀' : d.unlucky ? ' ✗' : ''} · ${d.session_spins} спинов · ${d.session_net >= 0 ? '+' : ''}${fmt(d.session_net)} FUN${pct != null ? ' (' + (pct >= 0 ? '+' : '') + pct + '%)' : ''} · серия ${d.loss_streak ? d.loss_streak + ' проигр.' : d.win_streak + ' выигр.'}${d.target_bet ? ' · хочет ставку ' + fmt(d.target_bet) : ''}${d.reason ? ' · ' + d.reason : ''}` : 'выбирает слот…';
+  const ev = $('events'); ev.innerHTML = '';
+  (d.events || []).forEach(e => { const x = document.createElement('div'); x.className = e.type; x.textContent = `${e.time}  ${EV_NAME[e.type] || e.type}  ${e.name || ''}${e.pct != null ? '  ' + (e.pct >= 0 ? '+' : '') + e.pct + '%' : ''}${e.balance != null ? '  ' + fmt(e.balance) : ''}${e.why ? '  ' + e.why : ''}`; ev.appendChild(x); });
+  const sl = $('slots'); sl.innerHTML = '<span class="n">слот</span><span>спины</span><span>итог</span><span>лучш.</span>';
+  (d.slots || []).forEach(s => { const cls = s.lucky ? 'lucky' : s.unlucky ? 'unlucky' : ''; sl.insertAdjacentHTML('beforeend', `<span class="n ${cls}">${s.lucky ? '🍀 ' : s.unlucky ? '✗ ' : ''}${s.name}</span><span>${s.spins}</span><span class="${cls}">${s.net >= 0 ? '+' : ''}${s.net}</span><span>${s.best_pct >= 0 ? '+' : ''}${s.best_pct}%</span>`); });
 }
 function drawDopa() {
   const c = $('dopa'); if (c.width !== c.clientWidth) c.width = c.clientWidth;
@@ -576,7 +602,7 @@ es.onmessage = ev => {
     rewardMarks.push({ i: rateHist.length - 1, r: m.r });
     if (m.casino) {
       dopa.push({ r: m.r, cum: total }); if (dopa.length > 300) dopa.shift();
-      drawDopa(); showCasino(m.casino);
+      drawDopa(); showCasino(m.casino, true);
       const d = m.casino.delta || 0;
       if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(`спин: ${d.toFixed(2)} FUN → PPL101 (аверсивный дофамин ${m.r.toFixed(2)})`, 'bad'); }
       else if (m.r > 0) { pamFlash = 1; flash('rgba(255,217,59,0.3)'); log(`спин: +${d.toFixed(2)} FUN → PAM (дофамин +${m.r.toFixed(2)})`, 'ok'); }

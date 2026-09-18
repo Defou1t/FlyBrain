@@ -18,6 +18,28 @@ FORBIDDEN = re.compile(
     re.I)
 
 
+def start_screencast(context, page, on_frame, max_width: int = 1024, max_height: int = 640, quality: int = 50):
+    """Live video of the page for the visualiser: Chromium's own screencast (a JPEG per repaint, so
+    reels spin at the page's frame rate instead of one screenshot per decision). Frames are delivered
+    while the main thread is inside Playwright calls (wait_for_timeout etc.)."""
+    import base64
+    cdp = context.new_cdp_session(page)
+
+    def on(params):
+        try:
+            on_frame(base64.b64decode(params["data"]))
+        finally:
+            try:
+                cdp.send("Page.screencastFrameAck", {"sessionId": params["sessionId"]})
+            except Exception:
+                pass
+
+    cdp.on("Page.screencastFrame", on)
+    cdp.send("Page.startScreencast", {"format": "jpeg", "quality": quality, "maxWidth": max_width,
+                                      "maxHeight": max_height, "everyNthFrame": 1})
+    return cdp
+
+
 def load_session_cookie(path: str = SESSION_FILE) -> str | None:
     """PHPSESSID value from $FLY_PHPSESSID or data/session.txt (one line). Never logged, never committed."""
     val = os.environ.get("FLY_PHPSESSID", "").strip()
@@ -53,6 +75,26 @@ class WebEnv:
         self.links: list[tuple[str, str]] = []
         self.boxes: list[list[int]] = []     # viewport bbox [x, y, w, h] per link
         self.step_i = 0
+        self._on_frame = None
+        self._cast = None
+
+    @property
+    def on_frame(self):
+        return self._on_frame
+
+    @on_frame.setter
+    def on_frame(self, cb):
+        """Set by the agent when a visualiser is attached: starts the live screencast."""
+        self._on_frame = cb
+        if cb and self._cast is None:
+            try:
+                self._cast = start_screencast(self.context, self.page, lambda jpg: self._on_frame and self._on_frame(jpg))
+            except Exception as e:
+                print(f"browser: screencast unavailable ({str(e)[:80]})")
+
+    def idle(self, seconds: float):
+        """Sleep while still pumping browser events (live frames keep flowing)."""
+        self.page.wait_for_timeout(seconds * 1000)
 
     def _norm(self, href: str) -> str:
         u = urlparse(urljoin(self.page.url, href))

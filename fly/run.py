@@ -91,8 +91,20 @@ def main():
     control = Control(viz, mode)
     rng = np.random.default_rng(args.seed)
     interrupted = False
+    return_to = None                                 # 'casino' while the fly takes a walk to recover its appetite
     episodes = itertools.count(1) if args.episodes <= 0 else range(1, args.episodes + 1)
     total_label = "∞" if args.episodes <= 0 else str(args.episodes)
+
+    def switch(new_mode: str):
+        nonlocal env, readout, mode
+        print(f"switching to {new_mode} mode")
+        env.close()
+        mode = new_mode
+        env, readout = make_env(mode)
+        control.mode = mode
+        if viz:
+            viz.set_state(paused=False, mode=mode)
+
     try:
         for ep in episodes:
             print(f"episode {ep}/{total_label}")
@@ -100,18 +112,19 @@ def main():
                 total = run_episode(brain, sim, readout, env, rng, ticks=args.ticks, train=not args.no_train,
                                     viz=viz, episode=ep, pace=args.pace, control=control)
             except SwitchMode as sw:                 # the page asked for the other activity
-                print(f"switching to {sw.mode} mode")
-                env.close()
-                mode = sw.mode
-                env, readout = make_env(mode)
-                control.mode = mode
-                if viz:
-                    viz.set_state(paused=False, mode=mode)
+                return_to = None
+                switch(sw.mode)
                 continue
             extra = (f"balance {env.balance} FUN, cumulative dopamine {env.cum_reward:+.2f}" if mode == "casino"
                      else f"unique pages {len(env.visited)}")
             print(f"  return {total:+.1f}, {extra}")
-            if total == 0 and env.step_i == 0:
+            if mode == "casino" and getattr(env, "rest", False):
+                return_to = "casino"                 # lost its appetite: one walk around the site, then back
+                switch("browse")
+            elif return_to and mode == "browse":
+                return_to = None
+                switch("casino")
+            elif total == 0 and env.step_i == 0:
                 time.sleep(5)                        # page gave nothing to click: do not hammer the site
     except KeyboardInterrupt:
         interrupted = True

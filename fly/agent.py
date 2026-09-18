@@ -72,11 +72,15 @@ def run_episode(brain: Brain, sim: LIF, readout: Readout, env, rng: np.random.Ge
                 sim.run(max(8, ticks // 4), encode(brain, obs["png"]), hook=viz.tick if viz else None)
                 control.poll(block=True, timeout=0.5)
         mask = obs["mask"].copy()
-        a, p = readout.act(counts, mask, rng)
+        prior = env.action_prior() if hasattr(env, "action_prior") else None   # appetite / stake pattern
+        a, p = readout.act(counts, mask, rng, prior)
         url, text = obs["links"][a]
         if viz:
             viz.decision(p, a, sim.firing_rate())
-            time.sleep(pace)            # let the fly land on the link before the page changes
+            if hasattr(env, "idle"):
+                env.idle(pace)          # let the fly land on the link; live frames keep flowing
+            else:
+                time.sleep(pace)
         obs, r, done = env.step(a)
         trajectory.append((counts, mask, a, p))
         rewards.append(r)

@@ -322,7 +322,11 @@ class VizServer:
                    "links": [{"url": u, "text": t, "box": b} for (u, t), b in zip(obs["links"], obs["boxes"])]})
 
     def frame(self, jpg: bytes):
-        """Live view of the browser between observations (reels spinning, strip scrolling)."""
+        """Live view of the browser (Chromium screencast: reels spinning, strip scrolling), <= 30 fps."""
+        now = time.time()
+        if now - getattr(self, "_last_frame", 0.0) < 1 / 30:
+            return
+        self._last_frame = now
         self.send({"t": "frame", "jpg": base64.b64encode(jpg).decode()}, drop_if_busy=True)
 
     def decision(self, probs: np.ndarray, action: int, rate: float):
