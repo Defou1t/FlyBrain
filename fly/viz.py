@@ -52,6 +52,16 @@ def all_ips() -> list[str]:
                 ips.append(ip)
     except OSError:
         pass
+    if os.name == "nt":   # VPN (RAS) adapters are missing from getaddrinfo - read them off ipconfig
+        import re
+        import subprocess
+        try:
+            out = subprocess.run(["ipconfig"], capture_output=True, text=True, timeout=5, errors="replace").stdout
+            for ip in re.findall(r"IPv4[^:]*:\s*(\d+\.\d+\.\d+\.\d+)", out):
+                if not ip.startswith(("127.", "169.254.")) and ip not in ips:
+                    ips.append(ip)
+        except Exception:
+            pass
     return ips
 
 
