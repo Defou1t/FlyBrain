@@ -41,6 +41,7 @@ class Brain:
     motor: np.ndarray           # neuron indices of top VNC motor neurons
     dopamine: np.ndarray        # PPL101 pair (aversive dopamine)
     soma: np.ndarray            # [n, 3] soma position (nm-ish voxel coords), NaN if unknown
+    reward_dopamine: np.ndarray = None   # PAM cluster (appetitive dopamine)
 
     @property
     def n(self) -> int:
@@ -128,13 +129,16 @@ def build(n_readout: int = 512) -> Brain:
     descending = top(superclass == "descending_neuron", n_readout)
     motor = top(np.isin(superclass, ["vnc_motor", "cb_motor"]), n_readout)
     dopamine = np.flatnonzero(cell_type == "PPL101")
+    # appetitive dopamine: PAM neurons (mushroom-body reward DANs)
+    reward_dopamine = np.flatnonzero(np.char.startswith(cell_type.astype(str), "PAM"))
 
-    brain = Brain(W, bodies, superclass, cell_type, retina["L"], retina["R"], descending, motor, dopamine, soma)
+    brain = Brain(W, bodies, superclass, cell_type, retina["L"], retina["R"], descending, motor, dopamine, soma,
+                  reward_dopamine)
     np.savez_compressed(
         CACHE, data=W.data, indices=W.indices, indptr=W.indptr, shape=np.array(W.shape),
         body_id=bodies, superclass=superclass.astype(str), cell_type=cell_type.astype(str),
         retina_L=retina["L"], retina_R=retina["R"], descending=descending, motor=motor, dopamine=dopamine,
-        soma=soma,
+        soma=soma, reward_dopamine=reward_dopamine,
     )
     return brain
 
@@ -144,11 +148,11 @@ def load() -> Brain:
         download()
         return build()
     z = np.load(CACHE, allow_pickle=False)
-    if "soma" not in z:   # cache from an older build
+    if "soma" not in z or "reward_dopamine" not in z:   # cache from an older build
         return build()
     W = sp.csr_matrix((z["data"], z["indices"], z["indptr"]), shape=tuple(z["shape"]))
     return Brain(W, z["body_id"], z["superclass"], z["cell_type"], z["retina_L"], z["retina_R"],
-                 z["descending"], z["motor"], z["dopamine"], z["soma"])
+                 z["descending"], z["motor"], z["dopamine"], z["soma"], z["reward_dopamine"])
 
 
 def synthetic(n: int = 20_000, k: int = 40, seed: int = 0) -> Brain:
@@ -176,4 +180,4 @@ def synthetic(n: int = 20_000, k: int = 40, seed: int = 0) -> Brain:
     soma[vnc] = rng.standard_normal((vnc.sum(), 3)).astype(np.float32) * np.array([0.35, 0.35, 1.2], np.float32)         + np.array([0, 0, 2.6], np.float32)
     soma = soma * 15000 + 40000
     return Brain(W, np.arange(n), sc, np.full(n, "", dtype=object), retina_L, retina_R, descending, motor, dopamine,
-                 soma)
+                 soma, perm[-40:-2])

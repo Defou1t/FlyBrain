@@ -31,6 +31,10 @@ def main():
     ap.add_argument("--pace", type=float, default=2.5, help="seconds to wait after a decision (viz only)")
     ap.add_argument("--session-file", default=SESSION_FILE,
                     help="file with the PHPSESSID cookie value (or set $FLY_PHPSESSID); the fly browses logged in")
+    ap.add_argument("--casino", action="store_true", help="play a demo slot (bets = actions) instead of browsing")
+    ap.add_argument("--game", default=None, help="demo game URL (must contain isMoney=false)")
+    ap.add_argument("--public", action="store_true",
+                    help="let colleagues watch the visualiser at http://<your-ip>:<port>/ (toggle in the page)")
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -49,13 +53,20 @@ def main():
     viz = None
     if args.viz:
         from .viz import VizServer
-        viz = VizServer(brain, port=args.port, open_browser=not args.no_open)
+        viz = VizServer(brain, port=args.port, open_browser=not args.no_open, public=args.public)
         viz.wait_for_client()
 
     cookie = load_session_cookie(args.session_file)
-    env = WebEnv(start=args.start, headless=not args.headed, max_steps=args.steps, session_cookie=cookie)
+    if args.casino:
+        from .casino import DEMO_GAME, CasinoEnv
+        env = CasinoEnv(game=args.game or DEMO_GAME, headless=not args.headed, max_steps=args.steps,
+                        session_cookie=cookie)
+        print(f"casino: demo game {env.game}  (log -> {env.log_path})")
+    else:
+        env = WebEnv(start=args.start, headless=not args.headed, max_steps=args.steps, session_cookie=cookie)
     print("session: PHPSESSID loaded from file/env, browsing as the logged-in user" if cookie else "session: guest")
-    ckpt = os.path.join(connectome.DATA, "readout_synthetic.npz" if args.synthetic else "readout.npz")
+    ckpt = os.path.join(connectome.DATA, "readout" + ("_synthetic" if args.synthetic else "")
+                        + ("_casino" if args.casino else "") + ".npz")
     readout = Readout(brain.readout.size, env.max_actions, seed=args.seed, path=ckpt)
     rng = np.random.default_rng(args.seed)
     try:
@@ -63,7 +74,9 @@ def main():
             print(f"episode {ep + 1}/{args.episodes}")
             total = run_episode(brain, sim, readout, env, rng, ticks=args.ticks, train=not args.no_train,
                                 viz=viz, episode=ep + 1, pace=args.pace)
-            print(f"  return {total:+.1f}, unique pages {len(env.visited)}")
+            extra = (f"balance {env.balance} FUN, cumulative dopamine {env.cum_reward:+.2f}" if args.casino
+                     else f"unique pages {len(env.visited)}")
+            print(f"  return {total:+.1f}, {extra}")
     finally:
         env.close()
     if viz:

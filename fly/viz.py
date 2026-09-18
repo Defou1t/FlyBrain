@@ -1,7 +1,10 @@
 """Live visualiser: tiny HTTP + Server-Sent-Events server feeding viz/index.html (Three.js).
 
-Streams: neuron activity on the 3-D soma cloud every few ticks, the page screenshot with link boxes,
-the readout's softmax over links, the chosen click and the reward.
+Streams: neuron activity on the 3-D soma cloud every few ticks, the page screenshot with link/button
+boxes, the readout's softmax, the chosen click, the reward and (casino mode) balance / bet / win.
+
+Remote viewing: the server listens on all interfaces; remote clients are only served while
+`public` is on (CLI --public, or toggled at runtime from a localhost browser / GET /admin/public?on=1).
 """
 from __future__ import annotations
 
@@ -9,10 +12,12 @@ import base64
 import json
 import os
 import queue
+import socket
 import threading
 import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
 
 import numpy as np
 
@@ -23,14 +28,27 @@ STATIC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))
 GROUPS = {   # superclass prefix -> colour group id used by the page
     "ol_": 1, "visual": 1, "cb_": 2, "vnc_": 3, "ascending": 3, "descending": 4, "vnc_motor": 5, "cb_motor": 5,
 }
+LOCAL = ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+
+def lan_ip() -> str:
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except OSError:
+        return socket.gethostbyname(socket.gethostname())
 
 
 class VizServer:
     def __init__(self, brain: Brain, port: int = 8765, max_points: int = 120_000, every: int = 4,
-                 tick_delay: float = 0.03, open_browser: bool = True):
+                 tick_delay: float = 0.03, open_browser: bool = True, public: bool = False):
         self.brain = brain
         self.every = every
         self.tick_delay = tick_delay
+        self.public = public
         self.clients: list[queue.Queue] = []
         self.lock = threading.Lock()
 
@@ -39,7 +57,8 @@ class VizServer:
         rng = np.random.default_rng(0)
         if idx.size > max_points:
             idx = rng.choice(idx, max_points, replace=False)
-        must = np.concatenate([brain.readout, brain.dopamine, brain.retina_L[brain.retina_L >= 0],
+        pam = brain.reward_dopamine if brain.reward_dopamine is not None else np.zeros(0, np.int64)
+        must = np.concatenate([brain.readout, brain.dopamine, pam, brain.retina_L[brain.retina_L >= 0],
                                brain.retina_R[brain.retina_R >= 0]])
         self.idx = np.unique(np.concatenate([idx, must[has[must]]]))
         self.act = np.zeros(self.idx.size, np.float32)
@@ -51,75 +70,108 @@ class VizServer:
         sc = brain.superclass[self.idx].astype(str)
         for prefix, g in GROUPS.items():
             group[np.char.startswith(sc, prefix)] = g
-        group[np.isin(self.idx, brain.readout)] = np.where(np.isin(self.idx[np.isin(self.idx, brain.readout)],
-                                                                    brain.descending), 4, 5)
+        group[np.isin(self.idx, brain.descending)] = 4
+        group[np.isin(self.idx, brain.motor)] = 5
         retina = np.concatenate([brain.retina_L[brain.retina_L >= 0], brain.retina_R[brain.retina_R >= 0]])
         group[np.isin(self.idx, retina)] = 6
         group[np.isin(self.idx, brain.dopamine)] = 7
+        group[np.isin(self.idx, pam)] = 8
         # where the readout neurons (DN first, then motor) sit inside the streamed activity vector
         pos_in_idx = {int(v): i for i, v in enumerate(self.idx)}
         readout_pos = [pos_in_idx.get(int(v), -1) for v in brain.readout]
-        self.meta = json.dumps({"n": int(self.idx.size), "total": int(brain.n), "synapses": int(brain.W.nnz),
-                                "n_descending": int(brain.descending.size), "readout": readout_pos,
-                                "group": base64.b64encode(group.tobytes()).decode()})
+        self.meta = {"n": int(self.idx.size), "total": int(brain.n), "synapses": int(brain.W.nnz),
+                     "n_descending": int(brain.descending.size), "readout": readout_pos,
+                     "group": base64.b64encode(group.tobytes()).decode()}
 
         self.port = port
+        self.lan = lan_ip()
         server = self
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *a):  # quiet
                 pass
 
-            def _send(self, body: bytes, ctype: str):
-                self.send_response(200)
+            def _send(self, body: bytes, ctype: str, code: int = 200):
+                self.send_response(code)
                 self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
 
             def do_GET(self):
-                if self.path == "/":
+                local = self.client_address[0] in LOCAL
+                if not local and not server.public:
+                    return self._send("доступ выключен / remote access is off".encode(), "text/plain; charset=utf-8", 403)
+                u = urlparse(self.path)
+                if u.path == "/":
                     with open(os.path.join(STATIC, "index.html"), "rb") as f:   # re-read: edit & refresh
                         self._send(f.read(), "text/html; charset=utf-8")
-                elif self.path.startswith("/assets/") and ".." not in self.path:
-                    fp = os.path.join(STATIC, self.path.lstrip("/").replace("/", os.sep))
+                elif u.path.startswith("/assets/") and ".." not in u.path:
+                    fp = os.path.join(STATIC, u.path.lstrip("/").replace("/", os.sep))
                     if not os.path.isfile(fp):
                         return self.send_error(404)
                     ctype = {"js": "application/javascript", "glb": "model/gltf-binary", "png": "image/png",
                              "css": "text/css"}.get(fp.rsplit(".", 1)[-1], "application/octet-stream")
                     with open(fp, "rb") as f:
                         self._send(f.read(), ctype)
-                elif self.path == "/soma.bin":
+                elif u.path == "/soma.bin":
                     self._send(server.soma_bin, "application/octet-stream")
-                elif self.path == "/meta.json":
-                    self._send(server.meta.encode(), "application/json")
-                elif self.path == "/events":
+                elif u.path == "/meta.json":
+                    meta = dict(server.meta, local=local, public=server.public,
+                                lan_url=f"http://{server.lan}:{server.port}/")
+                    self._send(json.dumps(meta).encode(), "application/json")
+                elif u.path == "/admin/public":
+                    if not local:
+                        return self._send(b"forbidden", "text/plain", 403)
+                    q = parse_qs(u.query)
+                    if "on" in q:
+                        server.set_public(q["on"][0] in ("1", "true", "on"))
+                    self._send(json.dumps({"public": server.public, "lan_url": f"http://{server.lan}:{server.port}/"})
+                               .encode(), "application/json")
+                elif u.path == "/events":
                     self.send_response(200)
                     self.send_header("Content-Type", "text/event-stream")
                     self.send_header("Cache-Control", "no-cache")
                     self.end_headers()
-                    q: queue.Queue = queue.Queue(maxsize=64)
+                    qq: queue.Queue = queue.Queue(maxsize=64)
                     with server.lock:
-                        server.clients.append(q)
+                        server.clients.append(qq)
                     try:
                         while True:
-                            msg = q.get()
+                            msg = qq.get()
+                            if msg is None:            # remote access switched off -> drop remote viewers
+                                if not local:
+                                    break
+                                continue
                             self.wfile.write(b"data: " + msg + b"\n\n")
                             self.wfile.flush()
                     except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
                         pass
                     finally:
                         with server.lock:
-                            server.clients.remove(q)
+                            server.clients.remove(qq)
                 else:
                     self.send_error(404)
 
-        self.httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        self.httpd = ThreadingHTTPServer(("0.0.0.0", port), Handler)
         self.httpd.daemon_threads = True
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
-        print(f"viz: http://127.0.0.1:{port}/")
+        print(f"viz: http://127.0.0.1:{port}/   remote: http://{self.lan}:{port}/ "
+              f"({'ON' if public else 'off - toggle in the page or GET /admin/public?on=1'})")
         if open_browser:
             webbrowser.open(f"http://127.0.0.1:{port}/")
+
+    def set_public(self, on: bool):
+        self.public = bool(on)
+        print(f"viz: remote access {'ON  -> http://%s:%d/' % (self.lan, self.port) if on else 'off'}")
+        self.send({"t": "public", "on": self.public, "lan_url": f"http://{self.lan}:{self.port}/"})
+        if not on:
+            with self.lock:
+                for q in self.clients:
+                    try:
+                        q.put_nowait(None)
+                    except queue.Full:
+                        pass
 
     def wait_for_client(self, timeout: float = 30.0):
         t0 = time.time()
@@ -149,11 +201,12 @@ class VizServer:
 
     def page(self, obs: dict, step: int, episode: int):
         self.send({"t": "page", "step": step, "episode": episode, "url": obs["url"], "title": obs.get("title", ""),
-                   "session": bool(obs.get("session")), "png": base64.b64encode(obs["png"]).decode(),
+                   "session": bool(obs.get("session")), "casino": obs.get("casino"),
+                   "png": base64.b64encode(obs["png"]).decode(),
                    "links": [{"url": u, "text": t, "box": b} for (u, t), b in zip(obs["links"], obs["boxes"])]})
 
     def decision(self, probs: np.ndarray, action: int, rate: float):
         self.send({"t": "decision", "p": [round(float(x), 4) for x in probs], "a": int(action), "rate": rate})
 
-    def reward(self, r: float, total: float, done: bool):
-        self.send({"t": "reward", "r": r, "total": total, "done": done})
+    def reward(self, r: float, total: float, done: bool, casino: dict | None = None):
+        self.send({"t": "reward", "r": r, "total": total, "done": done, "casino": casino})

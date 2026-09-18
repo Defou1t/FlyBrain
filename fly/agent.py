@@ -34,7 +34,7 @@ def run_episode(brain: Brain, sim: LIF, readout: Readout, env: WebEnv, rng: np.r
         rewards.append(r)
         last_reward = r
         if viz:
-            viz.reward(r, float(sum(rewards)), done)
+            viz.reward(r, float(sum(rewards)), done, obs.get("casino"))
         if verbose:
             print(f"  step {env.step_i:2d} rate={sim.firing_rate():.3f} p={p[a]:.2f} r={r:+.1f} -> {url}  [{text}]")
     if viz:

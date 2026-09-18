@@ -19,6 +19,15 @@
   #dragpad { position:absolute; left:0; right:0; top:0; height:62%; cursor:grab; }
   #dragpad:active { cursor:grabbing; }
   #left .credit { position:absolute; left:16px; bottom:10px; font-size:10.5px; color:#4b5470; pointer-events:none; }
+  #left .remote { position:absolute; left:16px; right:12px; bottom:30px; display:flex; align-items:center; gap:8px; font-size:11px; color:var(--dim); z-index:20; }
+  #left .remote button { background:#141a2c; color:var(--fg); border:1px solid var(--line); border-radius:12px; padding:2px 10px; font-size:11px; cursor:pointer; }
+  #left .remote button.on { color:var(--ok); border-color:#2b5a45; }
+  #left .remote code { font-size:10.5px; color:var(--cyan); }
+  #casino { display:none; }
+  #casino #ctiles { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:6px; }
+  #casino #ctiles div { background:#0a0d18; border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
+  #casino #ctiles b { display:block; font-size:14px; font-weight:600; }
+  #casino #ctiles span { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.5px; }
   #left .flylabel { position:absolute; left:0; right:0; bottom:34px; text-align:center; font-size:11px; color:var(--dim); pointer-events:none; }
   #left .flylabel b { color:var(--fg); font-weight:600; }
 
@@ -90,11 +99,17 @@
         <span><i style="background:#ffb347"></i>нисходящие</span>
         <span><i style="background:#ff5c5c"></i>моторные</span>
         <span><i style="background:#57f0ff"></i>сетчатка</span>
-        <span><i style="background:#ff4dd2"></i>PPL101</span>
+        <span><i style="background:#ff4dd2"></i>PPL101 (−)</span>
+        <span><i style="background:#ffd93b"></i>PAM (+)</span>
       </div>
     </div>
     <div class="flylabel" id="flylabel"><b>Drosophila</b> · парит</div>
-    <div class="credit">3D-модель мухи: «Fly» by jeremy, Poly Pizza, CC-BY 3.0 · перетаскивание — вращать мозг</div>
+    <div class="remote" id="remote" style="display:none">
+      <span>доступ коллегам</span>
+      <button id="pubbtn">выкл</button>
+      <code id="lanurl"></code>
+    </div>
+    <div class="credit">модель: NeuroMechFly v2 (EPFL, Apache-2.0) · перетаскивание — вращать мозг</div>
   </aside>
 
   <main id="center">
@@ -128,6 +143,15 @@
         <div><b id="s-rate">—</b><span>активность</span></div>
         <div><b id="s-ret">0</b><span>награда</span></div>
       </div>
+    </section>
+    <section id="casino">
+      <h2>Демо-счёт · дофамин</h2>
+      <div id="ctiles">
+        <div><b id="c-bal">—</b><span>баланс FUN</span></div>
+        <div><b id="c-bet">—</b><span>ставка</span></div>
+        <div><b id="c-win">—</b><span>выигрыш</span></div>
+      </div>
+      <canvas id="dopa" class="wide" height="90"></canvas>
     </section>
     <section>
       <h2>Активность по отделам мозга</h2>
@@ -183,11 +207,11 @@ function resize() {
 const s2w = (sx, sy, z = 0) => new THREE.Vector3(sx - W / 2, H / 2 - sy, z);
 
 // ------------------------------------------------------------------ brain point cloud (left column, top)
-const GROUP_COL = [[0.55, 0.58, 0.7], [0.30, 0.55, 1.0], [0.71, 0.48, 1.0], [0.30, 0.88, 0.54], [1.0, 0.70, 0.28], [1.0, 0.36, 0.36], [0.34, 0.94, 1.0], [1.0, 0.30, 0.82]];
-const GROUP_NAME = ['прочие', 'зрительные доли', 'центральный мозг', 'VNC', 'нисходящие', 'моторные', 'сетчатка', 'дофамин PPL101'];
-const GROUP_CSS = ['#8c93b3', '#4d8dff', '#b57bff', '#4de08a', '#ffb347', '#ff5c5c', '#57f0ff', '#ff4dd2'];
+const GROUP_COL = [[0.55, 0.58, 0.7], [0.30, 0.55, 1.0], [0.71, 0.48, 1.0], [0.30, 0.88, 0.54], [1.0, 0.70, 0.28], [1.0, 0.36, 0.36], [0.34, 0.94, 1.0], [1.0, 0.30, 0.82], [1.0, 0.85, 0.23]];
+const GROUP_NAME = ['прочие', 'зрительные доли', 'центральный мозг', 'VNC', 'нисходящие', 'моторные', 'сетчатка', 'дофамин PPL101 (−)', 'дофамин PAM (+)'];
+const GROUP_CSS = ['#8c93b3', '#4d8dff', '#b57bff', '#4de08a', '#ffb347', '#ff5c5c', '#57f0ff', '#ff4dd2', '#ffd93b'];
 const brainGroup = new THREE.Group(); scene.add(brainGroup);
-let N = 0, base = null, colors = null, actNow = null, actTarget = null, groupArr = null, points = null, dopaFlash = 0;
+let N = 0, base = null, colors = null, actNow = null, actTarget = null, groupArr = null, points = null, dopaFlash = 0, pamFlash = 0;
 let readoutPos = [], nDescending = 512, groupIdx = [];
 const spin = { x: 0.15, y: 0, drag: null, idle: 0 };
 async function loadBrain() {
@@ -211,18 +235,29 @@ async function loadBrain() {
   $('hudline').textContent = `${meta.total.toLocaleString('ru')} нейронов · ${meta.synapses.toLocaleString('ru')} синапсов · ${N.toLocaleString('ru')} сом на экране`;
   const g = $('groups'); g.innerHTML = '';
   for (let k = 1; k < GROUP_COL.length; k++) g.insertAdjacentHTML('beforeend', `<div class="grp"><span>${GROUP_NAME[k]}</span><div class="b"><i id="gb${k}" style="background:${GROUP_CSS[k]}"></i></div><span class="v" id="gv${k}">0%</span></div>`);
+  setupRemote(meta);
   layout();
 }
 function updateColors() {
-  const df = dopaFlash;
+  const df = dopaFlash, pf = pamFlash;
   for (let i = 0; i < N; i++) {
     const a = actNow[i] += (actTarget[i] - actNow[i]) * 0.35;
     const k = 0.16 + 0.84 * a, j = i * 3;
     let r = base[j] * k + a * 0.45, g = base[j + 1] * k + a * 0.45, b = base[j + 2] * k + a * 0.3;
     if (df > 0 && groupArr[i] === 7) { r = 1; g = 0.2 * (1 - df); b = 0.6; }
+    if (pf > 0 && groupArr[i] === 8) { r = 1; g = 0.9; b = 0.3 * (1 - pf); }
     colors[j] = r; colors[j + 1] = g; colors[j + 2] = b;
   }
   if (points) points.geometry.attributes.color.needsUpdate = true;
+}
+// ------------------------------------------------------------------ remote viewing toggle (localhost only)
+function setupRemote(meta) {
+  if (!meta.local) return;
+  const box = $('remote'), btn = $('pubbtn'), url = $('lanurl');
+  box.style.display = 'flex';
+  const show = (on, lan) => { btn.textContent = on ? 'вкл' : 'выкл'; btn.className = on ? 'on' : ''; url.textContent = on ? lan : ''; };
+  show(meta.public, meta.lan_url);
+  btn.onclick = async () => { const r = await (await fetch('/admin/public?on=' + (btn.className === 'on' ? 0 : 1))).json(); show(r.public, r.lan_url); log(r.public ? `доступ коллегам включён: ${r.lan_url}` : 'доступ коллегам выключен'); };
 }
 const pad = $('dragpad');
 pad.addEventListener('pointerdown', e => { spin.drag = [e.clientX, e.clientY]; spin.idle = 0; pad.setPointerCapture(e.pointerId); });
@@ -234,41 +269,53 @@ pad.addEventListener('pointermove', e => {
 });
 
 // ------------------------------------------------------------------ the fly (glTF, wings split L/R for flapping)
+// NeuroMechFly v2 Drosophila (EPFL flygym, Apache-2.0): nodes thorax / body / eyes / lWing / rWing / legs,
+// head at +z, up +y. Wings are separate meshes -> hinged at the wing base for flapping.
 const flyRoot = new THREE.Group(); scene.add(flyRoot);
 const fly = { wings: [], ready: false, len: 1 };
-function splitWings(mesh) {
-  const g = mesh.geometry, pos = g.attributes.position, idx = g.index, L = [], R = [];
-  for (let i = 0; i < idx.count; i += 3) {
-    const a = idx.getX(i), b = idx.getX(i + 1), c = idx.getX(i + 2);
-    ((pos.getX(a) + pos.getX(b) + pos.getX(c)) / 3 < 0 ? L : R).push(a, b, c);
+const envMap = (() => {   // small procedural sky/ground cubemap so chitin and wings get reflections
+  const faces = [];
+  for (let f = 0; f < 6; f++) {
+    const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 0, 64);
+    if (f === 2) { g.addColorStop(0, '#cfd8ff'); g.addColorStop(1, '#8fa3d8'); }        // +y sky
+    else if (f === 3) { g.addColorStop(0, '#2a2f45'); g.addColorStop(1, '#141826'); }   // -y ground
+    else { g.addColorStop(0, '#9fb0e6'); g.addColorStop(0.55, '#3b4463'); g.addColorStop(1, '#1a1e30'); }
+    x.fillStyle = g; x.fillRect(0, 0, 64, 64); faces.push(c);
   }
-  const mat = mesh.material.clone(); mat.transparent = true; mat.opacity = 0.6; mat.side = THREE.DoubleSide; mat.depthWrite = false; mat.roughness = 0.25; mat.metalness = 0.1;
-  const box = new THREE.Box3().setFromBufferAttribute(pos);
-  const rootY = box.min.y + 0.15, rootZ = (box.min.z + box.max.z) / 2 - 0.4;   // wing hinge: near the thorax, at the wing base
-  return [[L, -1], [R, 1]].map(([tris, s]) => {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', pos); if (g.attributes.normal) geo.setAttribute('normal', g.attributes.normal); if (g.attributes.uv) geo.setAttribute('uv', g.attributes.uv);
-    geo.setIndex(tris);
-    const m = new THREE.Mesh(geo, mat);
-    const pivot = new THREE.Group(); pivot.position.set(s * 0.3, rootY, rootZ); m.position.set(-s * 0.3, -rootY, -rootZ);
-    pivot.add(m); mesh.parent.add(pivot);
-    return { pivot, s };
-  });
-}
-new THREE.GLTFLoader().load('/assets/fly.glb', gltf => {
+  const t = new THREE.CubeTexture(faces); t.needsUpdate = true; return t;
+})();
+const MAT = {
+  thorax: new THREE.MeshPhysicalMaterial({ color: 0xb8733e, roughness: 0.45, metalness: 0.05, clearcoat: 0.6, clearcoatRoughness: 0.35, envMap, envMapIntensity: 0.7 }),
+  body:   new THREE.MeshPhysicalMaterial({ color: 0xc9953f, roughness: 0.5, metalness: 0.05, clearcoat: 0.5, clearcoatRoughness: 0.4, envMap, envMapIntensity: 0.6 }),
+  eyes:   new THREE.MeshPhysicalMaterial({ color: 0xd8232e, emissive: 0x4a0608, roughness: 0.18, metalness: 0.1, clearcoat: 1.0, clearcoatRoughness: 0.08, envMap, envMapIntensity: 1.2 }),
+  wing:   new THREE.MeshPhysicalMaterial({ color: 0xdff2ff, transparent: true, opacity: 0.42, roughness: 0.12, metalness: 0.15, side: THREE.DoubleSide, depthWrite: false, envMap, envMapIntensity: 1.4 }),
+  legs:   new THREE.MeshStandardMaterial({ color: 0x4a3826, roughness: 0.75, metalness: 0.05 }),
+};
+new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
   const model = gltf.scene;
-  const meshes = []; model.traverse(o => { if (o.isMesh) meshes.push(o); });
-  // widest primitive = wings
-  let wingMesh = null, best = 0;
-  for (const m of meshes) { m.geometry.computeBoundingBox(); const w = m.geometry.boundingBox.max.x - m.geometry.boundingBox.min.x; if (w > best) { best = w; wingMesh = m; } m.material.roughness = 0.55; }
-  if (wingMesh) { fly.wings = splitWings(wingMesh); wingMesh.parent.remove(wingMesh); }
-  for (const m of meshes) { const c = m.material.color; if (c.r > 0.7 && c.g < 0.4) { m.material.emissive = new THREE.Color(0x5a0a0a); m.material.roughness = 0.3; } }   // eyes glow
+  model.traverse(o => {
+    if (!o.isMesh) return;
+    const n = o.name.toLowerCase();
+    o.material = n.includes('wing') ? MAT.wing : n.includes('eye') ? MAT.eyes : n.includes('thorax') ? MAT.thorax : n.includes('leg') ? MAT.legs : MAT.body;
+    if (n.includes('wing')) fly.wings.push({ mesh: o, s: n.startsWith('l') ? -1 : 1 });
+  });
+  model.updateMatrixWorld(true);
+  // hinge each wing at its base: the wing-bbox corner closest to the thorax centre
+  const thorax = model.getObjectByName('thorax'), tc = new THREE.Vector3();
+  if (thorax) new THREE.Box3().setFromObject(thorax).getCenter(tc);
+  fly.wings = fly.wings.map(({ mesh, s }) => {
+    const bb = new THREE.Box3().setFromObject(mesh);
+    const hinge = new THREE.Vector3(s < 0 ? bb.max.x : bb.min.x, bb.max.y, bb.max.z);   // inner-top-front corner
+    hinge.x = tc.x + s * 0.12; hinge.y = Math.min(hinge.y, tc.y + 0.25);
+    const pivot = new THREE.Group(); pivot.position.copy(hinge); model.add(pivot); pivot.attach(mesh);
+    return { pivot, s, mesh };
+  });
   const box = new THREE.Box3().setFromObject(model), c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
   model.position.sub(c);
-  const wrap = new THREE.Group(); wrap.rotation.y = Math.PI; wrap.add(model);   // head was -z; make it +z (lookAt convention)
-  fly.len = Math.max(size.x, size.y, size.z); fly.wrap = wrap; flyRoot.add(wrap); fly.ready = true;
+  fly.len = Math.max(size.x, size.y, size.z); fly.model = model; flyRoot.add(model); fly.ready = true;
   layout();
-}, undefined, err => { console.warn('fly.glb failed, using placeholder', err); const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshStandardMaterial({ color: 0x555555 })); m.scale.set(1, 0.8, 1.6); flyRoot.add(m); fly.len = 3.2; fly.ready = true; layout(); });
+}, undefined, err => { console.warn('drosophila.glb failed, using placeholder', err); const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), MAT.body); m.scale.set(1, 0.8, 1.6); flyRoot.add(m); fly.len = 3.2; fly.ready = true; layout(); });
 
 const flyState = { mode: 'hover', pos: new THREE.Vector3(), home: new THREE.Vector3(), from: null, to: null, t0: 0, dur: 1.3, after: 'hover', look: new THREE.Vector3() };
 const landedQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI)
@@ -381,6 +428,31 @@ function renderLinks(probs) {
 function flash(color) { const f = $('flash'); f.style.background = `radial-gradient(ellipse at 15% 50%, ${color}, transparent 60%)`; f.style.opacity = 1; setTimeout(() => f.style.opacity = 0, 250); }
 const setFlyLabel = s => $('flylabel').innerHTML = `<b>Drosophila</b> · ${s}`;
 
+// ------------------------------------------------------------------ casino: balance tiles + dopamine curve
+const dopa = [];   // per spin: {r, cum}
+const fmt = v => v == null ? '—' : Number(v).toLocaleString('ru', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function showCasino(c) {
+  if (!c) return;
+  $('casino').style.display = 'block';
+  $('c-bal').textContent = fmt(c.balance); $('c-bet').textContent = fmt(c.bet); $('c-win').textContent = fmt(c.win);
+  $('c-win').style.color = c.delta > 0 ? 'var(--ok)' : c.delta < 0 ? 'var(--bad)' : '';
+}
+function drawDopa() {
+  const c = $('dopa'); if (c.width !== c.clientWidth) c.width = c.clientWidth;
+  const ctx = c.getContext('2d'), Wc = c.width, Hc = c.height, n = dopa.length;
+  ctx.clearRect(0, 0, Wc, Hc);
+  ctx.fillStyle = '#7b85a6'; ctx.font = '10px Consolas';
+  if (!n) { ctx.fillText('кривая дофамина: столбики — реакция на спин, линия — накопленная', 6, 12); return; }
+  const bw = Math.max(2, Math.min(10, (Wc - 8) / n)), mid = Hc * 0.55;
+  const rmax = Math.max(1, ...dopa.map(d => Math.abs(d.r)));
+  dopa.forEach((d, i) => { const h = d.r / rmax * (Hc * 0.4); ctx.fillStyle = d.r >= 0 ? 'rgba(255,217,59,.85)' : 'rgba(255,77,210,.85)'; ctx.fillRect(4 + i * bw, h >= 0 ? mid - h : mid, bw - 1, Math.abs(h) || 1); });
+  const cmin = Math.min(0, ...dopa.map(d => d.cum)), cmax = Math.max(0, ...dopa.map(d => d.cum)), span = Math.max(1e-6, cmax - cmin);
+  ctx.beginPath();
+  dopa.forEach((d, i) => { const x = 4 + i * bw + bw / 2, y = Hc - 4 - (d.cum - cmin) / span * (Hc - 8); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  ctx.strokeStyle = '#57d6ff'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = '#7b85a6'; ctx.fillText(`Σ ${dopa[n - 1].cum.toFixed(2)}`, Wc - 60, 11); ctx.fillText(`${n} спинов`, 6, 11);
+}
+
 // ------------------------------------------------------------------ events from python
 let total = 0;
 const es = new EventSource('/events');
@@ -404,10 +476,13 @@ es.onmessage = ev => {
     try { const u = new URL(m.url); $('fav').src = u.origin + '/favicon.ico'; } catch (e) {}
     const sess = $('sess'); sess.textContent = m.session ? 'сессия: вошла (PHPSESSID)' : 'гость'; sess.className = 'sess' + (m.session ? ' on' : '');
     $('s-ep').textContent = m.episode; $('s-step').textContent = m.step;
-    $('inline').textContent = `эпизод ${m.episode} · шаг ${m.step} · ${m.links.length} ссылок`;
-    $('status').textContent = 'смотрит на страницу — сетчатка → зрительные доли → нисходящие нейроны';
+    $('inline').textContent = `эпизод ${m.episode} · шаг ${m.step} · ${m.links.length} ${m.casino ? 'действий' : 'ссылок'}`;
+    $('status').textContent = m.casino ? `демо-счёт ${fmt(m.casino.balance)} FUN · ставка ${fmt(m.casino.bet)} · последний выигрыш ${fmt(m.casino.win)}`
+                                       : 'смотрит на страницу — сетчатка → зрительные доли → нисходящие нейроны';
+    showCasino(m.casino);
     renderLinks(null); drawOverlay(); takeOff(); setFlyLabel('смотрит');
-    log(`страница: ${m.url.replace(/^https?:\/\/[^/]+/, '') || '/'}  (${m.links.length} ссылок)`);
+    log(m.casino ? `демо-счёт: ${fmt(m.casino.balance)} FUN, ${m.links.length} действий (спин + ставки)`
+                 : `страница: ${m.url.replace(/^https?:\/\/[^/]+/, '') || '/'}  (${m.links.length} ссылок)`);
   } else if (m.t === 'decision') {
     chosen = m.a; renderLinks(m.p); drawOverlay(); showTip(chosen);
     if (links[chosen]) {
@@ -420,16 +495,26 @@ es.onmessage = ev => {
   } else if (m.t === 'reward') {
     total = m.total; $('s-ret').textContent = (total >= 0 ? '+' : '') + total.toFixed(1);
     rewardMarks.push({ i: rateHist.length - 1, r: m.r });
-    if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(`награда ${m.r.toFixed(1)} → дофамин PPL101 (аверсивный сигнал)`, 'bad'); }
-    else { flash('rgba(94,226,154,0.25)'); log(`награда +${m.r.toFixed(1)} — новая страница`, 'ok'); }
+    if (m.casino) {
+      dopa.push({ r: m.r, cum: total }); if (dopa.length > 300) dopa.shift();
+      drawDopa(); showCasino(m.casino);
+      const d = m.casino.delta || 0;
+      if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(`спин: ${d.toFixed(2)} FUN → PPL101 (аверсивный дофамин ${m.r.toFixed(2)})`, 'bad'); }
+      else if (m.r > 0) { pamFlash = 1; flash('rgba(255,217,59,0.3)'); log(`спин: +${d.toFixed(2)} FUN → PAM (дофамин +${m.r.toFixed(2)})`, 'ok'); }
+      else log('спин: баланс не изменился');
+    } else if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(`награда ${m.r.toFixed(1)} → дофамин PPL101 (аверсивный сигнал)`, 'bad'); }
+    else { pamFlash = 1; flash('rgba(94,226,154,0.25)'); log(`награда +${m.r.toFixed(1)} — новая страница → PAM`, 'ok'); }
     if (m.done) log(`эпизод завершён, сумма ${total.toFixed(1)}`);
+  } else if (m.t === 'public') {
+    const btn = $('pubbtn'); if (btn) { btn.textContent = m.on ? 'вкл' : 'выкл'; btn.className = m.on ? 'on' : ''; $('lanurl').textContent = m.on ? m.lan_url : ''; }
   }
 };
 es.onerror = () => { $('wait').style.display = 'block'; $('wait').textContent = 'связь с симуляцией потеряна'; };
 
 // ------------------------------------------------------------------ animation loop
 const ease = s => s < 0.5 ? 2 * s * s : 1 - Math.pow(-2 * s + 2, 2) / 2;
-const tmp = new THREE.Vector3();
+const tmp = new THREE.Vector3(), qA = new THREE.Quaternion(), qB = new THREE.Quaternion();
+const AX_Y = new THREE.Vector3(0, 1, 0), AX_Z = new THREE.Vector3(0, 0, 1);
 function animate(now) {
   requestAnimationFrame(animate);
   const t = now / 1000, fs = flyState;
@@ -450,11 +535,13 @@ function animate(now) {
     flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t * 14) * 0.6;
     flyRoot.quaternion.slerp(landedQ, 0.25);
   }
-  const flap = fs.mode === 'landed' ? 0 : Math.sin(t * 95) * 0.6 - 0.15;
-  fly.wings.forEach(w => { w.pivot.rotation.z = w.s * flap; });
+  // wings: folded over the back when landed, spread sideways and beating in the air
+  fly.spread = (fly.spread || 0) + (((fs.mode === 'landed') ? 0 : 1.25) - (fly.spread || 0)) * 0.12;
+  const flap = fs.mode === 'landed' ? 0 : Math.sin(t * 95) * 0.55 * Math.min(1, fly.spread);
+  fly.wings.forEach(w => { qA.setFromAxisAngle(AX_Z, w.s * flap); qB.setFromAxisAngle(AX_Y, -w.s * fly.spread); w.pivot.quaternion.copy(qA).multiply(qB); });
   if (ripple) drawOverlay();
   if (points) {
-    updateColors(); if (dopaFlash > 0) dopaFlash = Math.max(0, dopaFlash - 0.02);
+    updateColors(); if (dopaFlash > 0) dopaFlash = Math.max(0, dopaFlash - 0.02); if (pamFlash > 0) pamFlash = Math.max(0, pamFlash - 0.02);
     if (!spin.drag && ++spin.idle > 60) spin.y += 0.0025;
     brainGroup.rotation.set(spin.x, spin.y, 0);
   }

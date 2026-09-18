@@ -1,0 +1,8 @@
+drosophila.glb - anatomical Drosophila melanogaster mesh from NeuroMechFly v2 (flygym),
+baked to glTF by the "housefly" project (https://github.com/sandbornm/housefly).
+  source:  https://github.com/NeLy-EPFL/flygym  (Apache License 2.0)
+  paper:   Wang-Chen et al. (2024), NeuroMechFly v2, Nature Methods,
+           https://doi.org/10.1038/s41592-024-02497-y
+Nodes: thorax, body, eyes, lWing, rWing, legs (81k triangles, vertex normals, no textures).
+
+three.min.js / GLTFLoader.js - three.js r128, MIT.

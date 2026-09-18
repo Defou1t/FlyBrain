@@ -33,8 +33,11 @@ def encode(brain: Brain, png: bytes, gain: float = 1.5, contrast: bool = True) -
 
 
 def dopamine(brain: Brain, reward: float, amplitude: float = 3.0) -> np.ndarray:
-    """Aversive signal: negative reward -> current into PPL101 (as in DOOMFLY / FLYT3)."""
+    """Dopamine: reward < 0 -> current into PPL101 (aversive, as in DOOMFLY / FLYT3);
+    reward > 0 -> current into the PAM cluster (appetitive)."""
     ext = np.zeros(brain.n, np.float32)
     if reward < 0 and brain.dopamine.size:
         ext[brain.dopamine] = amplitude * min(1.0, -reward)
+    elif reward > 0 and brain.reward_dopamine is not None and brain.reward_dopamine.size:
+        ext[brain.reward_dopamine] = amplitude * min(1.0, reward)
     return ext
