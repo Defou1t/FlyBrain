@@ -176,9 +176,15 @@ python -m fly.run --casino --viz --tunnel
 лучше: свой сервер с `ssh -R 0.0.0.0:8765:127.0.0.1:8765 user@server` (`GatewayPorts yes`),
 ngrok/cloudflared (если доступны из сети), либо VPN до вашей машины.
 
-Провайдеры (`fly/tunnel.py`): `--tunnel lhr` (по умолчанию) — localhost.run через обычный
-`ssh -R`, ничего ставить не надо; `--tunnel cloudflare` — Cloudflare quick tunnel
-(`winget install Cloudflare.cloudflared`), если в вашей сети доступен `api.trycloudflare.com`.
+Провайдеры (`fly/tunnel.py`), `--tunnel` без значения = `auto`:
+* **ngrok** (по умолчанию, если установлен): `winget install --id 9MVS1J51GMK6 --source msstore`
+  (winget-пакет `Ngrok.Ngrok` устарел — 3.3, не читает новый конфиг), один раз
+  `ngrok config add-authtoken <токен>` (dashboard.ngrok.com → Your Authtoken). Быстрый, стабильный;
+  на бесплатном тарифе при первом заходе показывает страницу «Visit Site» — нажать один раз.
+* **lhr** — localhost.run через `ssh -R`: ничего ставить не надо, но медленно; запасной вариант,
+  на него `auto` откатывается, если ngrok не запустился (нет токена и т.п.).
+* **cloudflare** — quick tunnel через cloudflared; из нашей сети `api.trycloudflare.com` не отвечает
+  (проверено дважды, TCP до него не открывается), так что здесь не работает.
 
 ## Сессия (вход в аккаунт)
 

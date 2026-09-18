@@ -123,7 +123,7 @@ def all_ips() -> list[str]:
 class VizServer:
     def __init__(self, brain: Brain, port: int = 8765, max_points: int = 120_000, every: int = 4,
                  tick_delay: float = 0.012, open_browser: bool = True, public: bool = False,
-                 tunnel_provider: str = "lhr"):
+                 tunnel_provider: str = "auto"):
         self.brain = brain
         self.every = every
         self.tick_delay = tick_delay
@@ -320,7 +320,7 @@ class VizServer:
     def set_tunnel(self, on: bool, provider: str | None = None):
         """Start/stop a public tunnel (localhost.run over ssh, or cloudflared); starting also switches
         remote access on. Viewers through the tunnel count as remote (proxy headers), never as admins."""
-        from .tunnel import Tunnel
+        from .tunnel import open_tunnel
         if self.tunnel_managed:
             print("viz: the tunnel is owned by fly.serve - stop/start it there")
             return
@@ -328,9 +328,9 @@ class VizServer:
             if not self.tunnel_url:
                 if self.tunnel:
                     self.tunnel.stop()
-                self.tunnel = Tunnel(self.port, provider or self.tunnel_provider, on_url=self._tunnel_changed)
-                url = self.tunnel.start()
-                print(f"viz: tunnel ON -> {url}   (anyone with the link can watch; new link on every start)")
+                self.tunnel = open_tunnel(self.port, provider or self.tunnel_provider, on_url=self._tunnel_changed)
+                print(f"viz: tunnel ON ({self.tunnel.provider}) -> {self.tunnel.url}   "
+                      "(anyone with the link can watch; new link on every start)")
             if not self.public:
                 self.set_public(True)
         elif self.tunnel:

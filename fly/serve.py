@@ -58,11 +58,11 @@ def split_args(argv: list[str]):
         if a == "--public":
             mine["public"] = True
         elif a == "--tunnel":
-            if i + 1 < len(argv) and argv[i + 1] in ("lhr", "cloudflare"):
+            if i + 1 < len(argv) and argv[i + 1] in ("auto", "ngrok", "lhr", "cloudflare"):
                 mine["tunnel"] = argv[i + 1]
                 i += 1
             else:
-                mine["tunnel"] = "lhr"
+                mine["tunnel"] = "auto"
         elif a in ("--port", "--episodes"):
             mine[a.lstrip("-")] = argv[i + 1]
             i += 1
@@ -117,11 +117,11 @@ def main():
 
     tunnel = None
     if mine.get("tunnel"):
-        from .tunnel import Tunnel
-        tunnel = Tunnel(port, mine["tunnel"], on_url=lambda u: print(f"serve: public link -> {u}"))
+        from .tunnel import open_tunnel
         try:
-            env["FLY_TUNNEL_URL"] = tunnel.start()
-            print(f"serve: tunnel ON -> {env['FLY_TUNNEL_URL']}  (stays the same across restarts)")
+            tunnel = open_tunnel(port, mine["tunnel"], on_url=lambda u: print(f"serve: public link -> {u}"))
+            env["FLY_TUNNEL_URL"] = tunnel.url
+            print(f"serve: tunnel ON ({tunnel.provider}) -> {tunnel.url}  (stays the same across restarts)")
         except Exception as e:
             print(f"serve: tunnel failed: {e}")
             tunnel = None

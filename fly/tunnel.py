@@ -1,10 +1,13 @@
 """Public URL for the visualiser from outside the network, no account needed.
 
 Providers:
+  ngrok      ngrok http 127.0.0.1:<port>  -> https://<id>.ngrok-free.app   (default when installed;
+             install: winget install Ngrok.Ngrok, then once: ngrok config add-authtoken <your token>)
   lhr        localhost.run over plain SSH (ships with Windows):  ssh -R 80:127.0.0.1:<port> nokey@localhost.run
-             -> https://<id>.lhr.life   (default: works where Cloudflare's quick-tunnel API is blocked)
+             -> https://<id>.lhr.life   (no install, no account, but slow)
   cloudflare Cloudflare quick tunnel:  cloudflared tunnel --url http://127.0.0.1:<port>
-             -> https://<words>.trycloudflare.com   (install: winget install Cloudflare.cloudflared)
+             -> https://<words>.trycloudflare.com   (api.trycloudflare.com is blocked on some networks)
+  auto       ngrok if installed, otherwise lhr
 
 Either way anyone with the link can watch (the page has no controls), the link changes on every
 start, and the session is restarted automatically if the provider drops it.
@@ -23,9 +26,14 @@ CLOUDFLARED = [
     r"C:\Program Files\cloudflared\cloudflared.exe",
     "/usr/local/bin/cloudflared", "/usr/bin/cloudflared", "/opt/homebrew/bin/cloudflared",
 ]
+NGROK = [
+    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "WinGet", "Links", "ngrok.exe"),
+    r"C:\Program Files\ngrok\ngrok.exe", "/usr/local/bin/ngrok", "/opt/homebrew/bin/ngrok",
+]
 URL_RE = {
     "lhr": re.compile(r"https://[a-z0-9-]+\.lhr\.life"),
     "cloudflare": re.compile(r"https://(?!api\.)[a-z0-9-]+\.trycloudflare\.com"),
+    "ngrok": re.compile(r"https://[a-z0-9.-]+\.ngrok(?:-free)?\.(?:app|io|dev)"),
 }
 
 
@@ -33,10 +41,21 @@ def find_cloudflared() -> str | None:
     return shutil.which("cloudflared") or next((p for p in CLOUDFLARED if os.path.exists(p)), None)
 
 
+def find_ngrok() -> str | None:
+    return shutil.which("ngrok") or next((p for p in NGROK if os.path.exists(p)), None)
+
+
+def resolve(provider: str) -> str:
+    if provider == "auto":
+        return "ngrok" if find_ngrok() else "lhr"
+    return provider
+
+
 class Tunnel:
-    def __init__(self, port: int, provider: str = "lhr", on_url=None):
+    def __init__(self, port: int, provider: str = "auto", on_url=None):
+        provider = resolve(provider)
         if provider not in URL_RE:
-            raise ValueError(f"unknown tunnel provider {provider!r} (lhr | cloudflare)")
+            raise ValueError(f"unknown tunnel provider {provider!r} (ngrok | lhr | cloudflare | auto)")
         self.port = port
         self.provider = provider
         self.on_url = on_url                      # callback(url) when a (new) public URL is known
@@ -46,6 +65,11 @@ class Tunnel:
         self._stop = False
 
     def _command(self) -> list[str]:
+        if self.provider == "ngrok":
+            exe = find_ngrok()
+            if not exe:
+                raise RuntimeError("ngrok not found - install with: winget install Ngrok.Ngrok")
+            return [exe, "http", f"127.0.0.1:{self.port}", "--log=stdout", "--log-format=json"]
         if self.provider == "cloudflare":
             exe = find_cloudflared()
             if not exe:
@@ -64,7 +88,11 @@ class Tunnel:
         t0 = time.time()
         while self.url is None and time.time() - t0 < timeout:
             if self.proc.poll() is not None:
-                raise RuntimeError(f"{self.provider} tunnel exited: " + " ".join(self.log[-3:])[-400:])
+                tail = " ".join(self.log[-3:])[-400:]
+                if self.provider == "ngrok" and "authtoken" in tail.lower():
+                    raise RuntimeError("ngrok needs your authtoken once: ngrok config add-authtoken <token> "
+                                       "(dashboard.ngrok.com -> Your Authtoken)")
+                raise RuntimeError(f"{self.provider} tunnel exited: {tail}")
             time.sleep(0.2)
         if self.url is None:
             self.stop()
@@ -119,3 +147,22 @@ class Tunnel:
     @property
     def alive(self) -> bool:
         return self.proc is not None and self.proc.poll() is None and self.url is not None
+
+
+def open_tunnel(port: int, provider: str = "auto", on_url=None) -> Tunnel:
+    """Start the wanted provider; if it cannot (ngrok without an authtoken, blocked cloudflare), fall
+    back to localhost.run so the fly still gets a public link. Raises only if everything failed."""
+    first = resolve(provider)
+    order = [first] + (["lhr"] if first != "lhr" else [])
+    errors = []
+    for prov in order:
+        t = Tunnel(port, prov, on_url=on_url)
+        try:
+            t.start()
+            if prov != first:
+                print(f"viz: {first} failed ({errors[-1]}); using {prov} instead")
+            return t
+        except Exception as e:
+            errors.append(str(e))
+            t.stop()
+    raise RuntimeError("; ".join(errors))
