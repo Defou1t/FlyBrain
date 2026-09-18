@@ -83,6 +83,14 @@
   #gl { position:fixed; inset:0; pointer-events:none; z-index:10; }
   #flash { position:fixed; inset:0; pointer-events:none; opacity:0; transition:opacity .25s; z-index:5; }
   #wait { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); color:var(--dim); font-size:14px; z-index:6; background:rgba(7,9,15,.8); padding:8px 14px; border-radius:6px; }
+  @media (max-width: 1100px) {   /* narrow window / phone: stack the three columns */
+    body { overflow:auto; }
+    #app { position:static; display:grid; grid-template-columns:1fr; grid-template-rows:320px auto auto; min-height:100%; }
+    #left { height:320px; border-right:0; border-bottom:1px solid var(--line); }
+    #center { padding:12px; }
+    #right { border-left:0; border-top:1px solid var(--line); }
+    #links { max-height:260px; }
+  }
 </style>
 </head>
 <body>
@@ -255,7 +263,7 @@ function setupRemote(meta) {
   if (!meta.local) return;
   const box = $('remote'), btn = $('pubbtn'), url = $('lanurl');
   box.style.display = 'flex';
-  const show = (on, lan) => { btn.textContent = on ? 'вкл' : 'выкл'; btn.className = on ? 'on' : ''; url.textContent = on ? lan : ''; };
+  const show = (on, lan) => { btn.textContent = on ? 'вкл' : 'выкл'; btn.className = on ? 'on' : ''; url.textContent = on ? (meta.lan_urls || [lan]).join('  ') : ''; };
   show(meta.public, meta.lan_url);
   btn.onclick = async () => { const r = await (await fetch('/admin/public?on=' + (btn.className === 'on' ? 0 : 1))).json(); show(r.public, r.lan_url); log(r.public ? `доступ коллегам включён: ${r.lan_url}` : 'доступ коллегам выключен'); };
 }
@@ -335,6 +343,7 @@ function layout() {
   fitOverlay();
 }
 addEventListener('resize', resize);
+addEventListener('scroll', layout, { passive: true });   // stacked (narrow) layout scrolls the page
 
 // ------------------------------------------------------------------ browser window (DOM) + overlay
 const overlay = $('overlay'), octx = overlay.getContext('2d');

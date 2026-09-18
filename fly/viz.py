@@ -42,6 +42,19 @@ def lan_ip() -> str:
         return socket.gethostbyname(socket.gethostname())
 
 
+def all_ips() -> list[str]:
+    """Every non-loopback IPv4 of this host (LAN, VPN/Tailscale, virtual switches) - colleagues may need any."""
+    ips = [lan_ip()]
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith(("127.", "169.254.")) and ip not in ips:
+                ips.append(ip)
+    except OSError:
+        pass
+    return ips
+
+
 class VizServer:
     def __init__(self, brain: Brain, port: int = 8765, max_points: int = 120_000, every: int = 4,
                  tick_delay: float = 0.03, open_browser: bool = True, public: bool = False):
@@ -84,7 +97,8 @@ class VizServer:
                      "group": base64.b64encode(group.tobytes()).decode()}
 
         self.port = port
-        self.lan = lan_ip()
+        self.ips = all_ips()
+        self.lan = self.ips[0]
         server = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -118,7 +132,8 @@ class VizServer:
                     self._send(server.soma_bin, "application/octet-stream")
                 elif u.path == "/meta.json":
                     meta = dict(server.meta, local=local, public=server.public,
-                                lan_url=f"http://{server.lan}:{server.port}/")
+                                lan_url=f"http://{server.lan}:{server.port}/",
+                                lan_urls=[f"http://{ip}:{server.port}/" for ip in server.ips])
                     self._send(json.dumps(meta).encode(), "application/json")
                 elif u.path == "/admin/public":
                     if not local:
@@ -156,7 +171,8 @@ class VizServer:
         self.httpd = ThreadingHTTPServer(("0.0.0.0", port), Handler)
         self.httpd.daemon_threads = True
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
-        print(f"viz: http://127.0.0.1:{port}/   remote: http://{self.lan}:{port}/ "
+        remote = ", ".join(f"http://{ip}:{port}/" for ip in self.ips)
+        print(f"viz: http://127.0.0.1:{port}/   remote: {remote} "
               f"({'ON' if public else 'off - toggle in the page or GET /admin/public?on=1'})")
         if open_browser:
             webbrowser.open(f"http://127.0.0.1:{port}/")

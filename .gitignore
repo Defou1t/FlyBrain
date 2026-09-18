@@ -7,3 +7,5 @@ data/session.txt
 .env
 __pycache__/
 *.pyc
+data/casino_probe.json
+data/dopamine*.csv
