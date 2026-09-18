@@ -9,6 +9,8 @@ Remote viewing: the server listens on all interfaces; remote clients are only se
 from __future__ import annotations
 
 import base64
+import gzip
+import io
 import json
 import os
 import queue
@@ -29,6 +31,59 @@ GROUPS = {   # superclass prefix -> colour group id used by the page
     "ol_": 1, "visual": 1, "cb_": 2, "vnc_": 3, "ascending": 3, "descending": 4, "vnc_motor": 5, "cb_motor": 5,
 }
 LOCAL = ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+
+class Client:
+    """One SSE viewer. Reliable events queue up; the live streams (brain activity, video frames) keep
+    only the latest message per kind, so a slow link (tunnel) always gets fresh data, never a backlog.
+    Remote viewers also get a lower rate: they are on a tunnel with a few hundred KB/s at best."""
+
+    def __init__(self, local: bool):
+        self.local = local
+        self.q: queue.Queue = queue.Queue(maxsize=256)
+        self.latest: dict[str, bytes] = {}
+        self.sent_at: dict[str, float] = {}
+        self.min_gap = {"act": 0.045, "frame": 0.04} if local else {"act": 0.25, "frame": 0.15}
+        self.wake = threading.Event()
+
+    def put(self, kind: str, msg: bytes, droppable: bool):
+        if droppable:
+            self.latest[kind] = msg
+        else:
+            try:
+                self.q.put_nowait(msg)
+            except queue.Full:
+                pass
+        self.wake.set()
+
+    def next(self) -> bytes | None:
+        """Blocks until something is due; None = still nothing after a short wait."""
+        try:
+            return self.q.get_nowait()
+        except queue.Empty:
+            pass
+        now = time.time()
+        for kind in ("frame", "act"):
+            msg = self.latest.get(kind)
+            if msg is not None and now - self.sent_at.get(kind, 0.0) >= self.min_gap[kind]:
+                del self.latest[kind]
+                self.sent_at[kind] = now
+                return msg
+        self.wake.clear()
+        self.wake.wait(0.05)
+        return None
+
+
+def to_jpeg(png: bytes, quality: int = 72) -> bytes:
+    """The brain sees the PNG; viewers get a JPEG a quarter of the size."""
+    try:
+        from PIL import Image
+        im = Image.open(io.BytesIO(png)).convert("RGB")
+        out = io.BytesIO()
+        im.save(out, "JPEG", quality=quality, optimize=True)
+        return out.getvalue()
+    except Exception:
+        return png
 
 
 def lan_ip() -> str:
@@ -77,8 +132,10 @@ class VizServer:
         self.tunnel_provider = tunnel_provider
         self.commands: queue.Queue = queue.Queue()          # page -> agent loop
         self.state = {"paused": False, "mode": "browse"}    # what the fly is doing now
-        self.clients: list[queue.Queue] = []
+        self.clients: list[Client] = []
         self.lock = threading.Lock()
+        self.gz_cache: dict[str, bytes] = {}
+        self.raw_cache: dict[str, bytes] = {}
 
         has = ~np.isnan(brain.soma[:, 0])
         idx = np.flatnonzero(has)
@@ -90,6 +147,7 @@ class VizServer:
                                brain.retina_R[brain.retina_R >= 0]])
         self.idx = np.unique(np.concatenate([idx, must[has[must]]]))
         self.act = np.zeros(self.idx.size, np.float32)
+        self.spiked = np.zeros(self.idx.size, bool)
 
         pos = brain.soma[self.idx]
         pos = (pos - np.nanmean(pos, axis=0)) / (np.nanmax(np.abs(pos - np.nanmean(pos, axis=0))) + 1e-6)
@@ -127,6 +185,30 @@ class VizServer:
                 self.end_headers()
                 self.wfile.write(body)
 
+            def _send_static(self, body: bytes, ctype: str, key: str):
+                """Big static blobs: gzip once (cached), let the browser keep them for a day - the page
+                reloads after every fly restart and must not re-download 8 MB through the tunnel."""
+                gz = "gzip" in (self.headers.get("Accept-Encoding") or "")
+                if gz:
+                    body = server.gz_cache.get(key) or server.gz_cache.setdefault(key, gzip.compress(body, 6))
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Cache-Control", "public, max-age=86400")
+                if gz:
+                    self.send_header("Content-Encoding", "gzip")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def _send_cached(self, fp: str, ctype: str):
+                key = fp + str(os.stat(fp).st_mtime)
+                body = server.raw_cache.get(key)
+                if body is None:
+                    with open(fp, "rb") as f:
+                        body = f.read()
+                    server.raw_cache[key] = body
+                self._send_static(body, ctype, key)
+
             def do_GET(self):
                 # viewers coming through a tunnel connect from 127.0.0.1: they are told apart by proxy headers
                 # and by the Host they asked for (the tunnel's hostname, not 127.0.0.1/localhost)
@@ -147,10 +229,9 @@ class VizServer:
                         return self.send_error(404)
                     ctype = {"js": "application/javascript", "glb": "model/gltf-binary", "png": "image/png",
                              "css": "text/css"}.get(fp.rsplit(".", 1)[-1], "application/octet-stream")
-                    with open(fp, "rb") as f:
-                        self._send(f.read(), ctype)
+                    self._send_cached(fp, ctype)
                 elif u.path == "/soma.bin":
-                    self._send(server.soma_bin, "application/octet-stream")
+                    self._send_static(server.soma_bin, "application/octet-stream", "soma.bin")
                 elif u.path == "/meta.json":
                     meta = dict(server.meta, local=local, public=server.public,
                                 lan_url=f"http://{server.lan}:{server.port}/",
@@ -188,13 +269,15 @@ class VizServer:
                     self.send_header("Content-Type", "text/event-stream")
                     self.send_header("Cache-Control", "no-cache")
                     self.end_headers()
-                    qq: queue.Queue = queue.Queue(maxsize=64)
+                    cl = Client(local)
                     with server.lock:
-                        server.clients.append(qq)
+                        server.clients.append(cl)
                     try:
                         while True:
-                            msg = qq.get()
-                            if msg is None:            # remote access switched off -> drop remote viewers
+                            msg = cl.next()
+                            if msg is None:
+                                continue
+                            if msg == b"":             # remote access switched off -> drop remote viewers
                                 if not local:
                                     break
                                 continue
@@ -204,7 +287,7 @@ class VizServer:
                         pass
                     finally:
                         with server.lock:
-                            server.clients.remove(qq)
+                            server.clients.remove(cl)
                 else:
                     self.send_error(404)
 
@@ -267,11 +350,8 @@ class VizServer:
                    "tunnel_url": self.tunnel_url})
         if not on:
             with self.lock:
-                for q in self.clients:
-                    try:
-                        q.put_nowait(None)
-                    except queue.Full:
-                        pass
+                for cl in self.clients:
+                    cl.put("kick", b"", droppable=False)
 
     def _watch_page(self):
         """viz/index.html edited -> tell open pages to reload (no restart needed for the page itself)."""
@@ -297,36 +377,30 @@ class VizServer:
     def send(self, event: dict, drop_if_busy: bool = False):
         msg = json.dumps(event).encode()
         with self.lock:
-            for q in self.clients:
-                try:
-                    q.put_nowait(msg)
-                except queue.Full:
-                    if not drop_if_busy:
-                        q.get_nowait()
-                        q.put_nowait(msg)
+            for cl in self.clients:
+                cl.put(event["t"], msg, droppable=drop_if_busy)
 
     # ---- hooks called from the agent loop -------------------------------------------------
     def tick(self, spikes: np.ndarray, tick: int):
-        self.act *= 0.75
-        self.act[spikes[self.idx]] = 1.0
+        # a spike bitmask (1 bit per neuron, ~15 KB) instead of 8-bit activity (120 KB); the page decays it
+        self.spiked |= spikes[self.idx]
         if tick % self.every == 0:
-            a = np.clip(self.act * 255, 0, 255).astype(np.uint8)
-            self.send({"t": "act", "tick": tick, "a": base64.b64encode(a.tobytes()).decode()}, drop_if_busy=True)
+            bits = np.packbits(self.spiked)
+            self.spiked[:] = False
+            self.send({"t": "act", "tick": tick, "n": int(self.idx.size),
+                       "s": base64.b64encode(bits.tobytes()).decode()}, drop_if_busy=True)
         if self.tick_delay:
             time.sleep(self.tick_delay)
 
     def page(self, obs: dict, step: int, episode: int):
         self.send({"t": "page", "step": step, "episode": episode, "url": obs["url"], "title": obs.get("title", ""),
                    "session": bool(obs.get("session")), "casino": obs.get("casino"),
-                   "png": base64.b64encode(obs["png"]).decode(),
+                   "jpg": base64.b64encode(to_jpeg(obs["png"])).decode(),
                    "links": [{"url": u, "text": t, "box": b} for (u, t), b in zip(obs["links"], obs["boxes"])]})
 
     def frame(self, jpg: bytes):
-        """Live view of the browser (Chromium screencast: reels spinning, strip scrolling), <= 30 fps."""
-        now = time.time()
-        if now - getattr(self, "_last_frame", 0.0) < 1 / 30:
-            return
-        self._last_frame = now
+        """Live view of the browser (Chromium screencast: reels spinning, strip scrolling).
+        Each viewer takes the newest frame at its own pace (30 fps local, ~7 fps through a tunnel)."""
         self.send({"t": "frame", "jpg": base64.b64encode(jpg).decode()}, drop_if_busy=True)
 
     def decision(self, probs: np.ndarray, action: int, rate: float):

@@ -245,19 +245,19 @@ const GROUP_COL = [[0.55, 0.58, 0.7], [0.30, 0.55, 1.0], [0.71, 0.48, 1.0], [0.3
 const GROUP_NAME = ['прочие', 'зрительные доли', 'центральный мозг', 'VNC', 'нисходящие', 'моторные', 'сетчатка', 'дофамин PPL101 (−)', 'дофамин PAM (+)'];
 const GROUP_CSS = ['#8c93b3', '#4d8dff', '#b57bff', '#4de08a', '#ffb347', '#ff5c5c', '#57f0ff', '#ff4dd2', '#ffd93b'];
 const brainGroup = new THREE.Group(); scene.add(brainGroup);
-let N = 0, base = null, colors = null, actNow = null, actTarget = null, groupArr = null, points = null, dopaFlash = 0, pamFlash = 0;
+let N = 0, base = null, colors = null, actNow = null, actTarget = null, actBytes = null, groupArr = null, points = null, dopaFlash = 0, pamFlash = 0;
 let readoutPos = [], nDescending = 512, groupIdx = [];
 const spin = { x: 0.15, y: 0, drag: null, idle: 0 };
 async function loadBrain() {
   const meta = await (await fetch('/meta.json')).json();
-  const raw = new Float32Array(await (await fetch('/soma.bin')).arrayBuffer());
+  const raw = new Float32Array(await (await fetch('/soma.bin?v=' + meta.n + '_' + meta.total)).arrayBuffer());   // cached a day per brain
   N = meta.n; groupArr = Uint8Array.from(atob(meta.group), c => c.charCodeAt(0));
   readoutPos = meta.readout; nDescending = meta.n_descending;
   const pos = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) {   // dataset: x lateral, y dorso-ventral, z antero-posterior -> brain on top, VNC below
     pos[i * 3] = raw[i * 3]; pos[i * 3 + 1] = -raw[i * 3 + 2]; pos[i * 3 + 2] = raw[i * 3 + 1];
   }
-  base = new Float32Array(N * 3); colors = new Float32Array(N * 3); actNow = new Float32Array(N); actTarget = new Float32Array(N);
+  base = new Float32Array(N * 3); colors = new Float32Array(N * 3); actNow = new Float32Array(N); actTarget = new Float32Array(N); actBytes = new Uint8Array(N);
   groupIdx = GROUP_COL.map(() => []);
   for (let i = 0; i < N; i++) { const c = GROUP_COL[groupArr[i]] || GROUP_COL[0]; base.set(c, i * 3); groupIdx[groupArr[i]].push(i); }
   const geo = new THREE.BufferGeometry();
@@ -564,17 +564,21 @@ es.onmessage = ev => {
   const m = JSON.parse(ev.data);
   $('wait').style.display = 'none';
   if (m.t === 'act') {
-    const a = Uint8Array.from(atob(m.a), c => c.charCodeAt(0));
+    // spike bitmask (1 bit / neuron): a spike lights the neuron up, everything else decays here
     if (!actTarget) return;
-    for (let i = 0; i < N; i++) actTarget[i] = a[i] / 255;
-    let frac = 0; for (let i = 0; i < a.length; i++) if (a[i] > 128) frac++;
-    rateHist.push(frac / Math.max(1, a.length)); if (rateHist.length > 400) { rateHist.shift(); rewardMarks.forEach(r => r.i--); }
+    const bits = Uint8Array.from(atob(m.a || m.s), c => c.charCodeAt(0));
+    let frac = 0;
+    for (let i = 0; i < N; i++) {
+      if (bits[i >> 3] & (128 >> (i & 7))) { actTarget[i] = 1; frac++; } else actTarget[i] *= 0.55;
+      actBytes[i] = actTarget[i] * 255;
+    }
+    rateHist.push(frac / Math.max(1, N)); if (rateHist.length > 400) { rateHist.shift(); rewardMarks.forEach(r => r.i--); }
     while (rewardMarks.length && rewardMarks[0].i < 0) rewardMarks.shift();
-    $('s-rate').textContent = (frac / Math.max(1, a.length) * 100).toFixed(1) + '%';
-    drawTrace(); drawRaster(a); updateGroups();
+    $('s-rate').textContent = (frac / Math.max(1, N) * 100).toFixed(1) + '%';
+    drawTrace(); drawRaster(actBytes); updateGroups();
   } else if (m.t === 'page') {
     links = m.links; chosen = -1; showTip(-1);
-    $('shot').src = 'data:image/png;base64,' + m.png;
+    $('shot').src = m.jpg ? 'data:image/jpeg;base64,' + m.jpg : 'data:image/png;base64,' + m.png;
     const short = m.url.replace(/^https?:\/\//, '');
     $('url').textContent = short; $('tabtitle').textContent = m.title || short;
     try { const u = new URL(m.url); $('fav').src = u.origin + '/favicon.ico'; } catch (e) {}

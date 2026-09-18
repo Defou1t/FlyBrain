@@ -18,7 +18,7 @@ FORBIDDEN = re.compile(
     re.I)
 
 
-def start_screencast(context, page, on_frame, max_width: int = 1024, max_height: int = 640, quality: int = 50):
+def start_screencast(context, page, on_frame, max_width: int = 800, max_height: int = 500, quality: int = 40):
     """Live video of the page for the visualiser: Chromium's own screencast (a JPEG per repaint, so
     reels spin at the page's frame rate instead of one screenshot per decision). Frames are delivered
     while the main thread is inside Playwright calls (wait_for_timeout etc.)."""
