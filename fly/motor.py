@@ -50,11 +50,14 @@ class Readout:
             xb = np.append(x, 1.0)
             adv = G - float(xb @ self.value)
             self.value += self.lr * adv * xb
-            g = -p.copy()
+            g = -p.copy()                       # d log pi(a) / d logits = onehot(a) - p
             g[a] += 1.0
-            g += entropy * (p * (np.log(p + 1e-9) + 1.0)) * mask   # entropy bonus keeps exploration alive
-            self.W += self.lr * adv * np.outer(x, g)
-            self.b += self.lr * adv * g
+            logp = np.log(p + 1e-9)
+            H = -float((p * logp)[mask].sum())
+            g_ent = -p * (logp + H) * mask      # d H / d logits: pushes towards higher entropy
+            g = adv * g + entropy * g_ent       # entropy bonus is not scaled by the advantage
+            self.W += self.lr * np.outer(x, g)
+            self.b += self.lr * g
 
     def save(self):
         if self.path:

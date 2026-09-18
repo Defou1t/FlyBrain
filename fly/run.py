@@ -11,7 +11,7 @@ import time
 import numpy as np
 
 from . import connectome
-from .agent import run_episode
+from .agent import Control, SwitchMode, run_episode
 from .brain import LIF
 from .browser import SESSION_FILE, START, WebEnv, load_session_cookie
 from .motor import Readout
@@ -71,17 +71,24 @@ def main():
         viz.wait_for_client(timeout=3 if args.episodes <= 0 else 30)   # supervised: do not wait for viewers
 
     cookie = load_session_cookie(args.session_file)
-    if args.casino:
-        from .casino import DEMO_GAME, CasinoEnv
-        env = CasinoEnv(game=args.game or DEMO_GAME, headless=not args.headed, max_steps=args.steps,
-                        session_cookie=cookie)
-        print(f"casino: demo game {env.game}  (log -> {env.log_path})")
-    else:
-        env = WebEnv(start=args.start, headless=not args.headed, max_steps=args.steps, session_cookie=cookie)
     print("session: PHPSESSID loaded from file/env, browsing as the logged-in user" if cookie else "session: guest")
-    ckpt = os.path.join(connectome.DATA, "readout" + ("_synthetic" if args.synthetic else "")
-                        + ("_casino" if args.casino else "") + ".npz")
-    readout = Readout(brain.readout.size, env.max_actions, seed=args.seed, path=ckpt)
+
+    def make_env(mode: str):
+        if mode == "casino":
+            from .casino import DEMO_GAME, LOBBY, CasinoEnv
+            e = CasinoEnv(game=args.game or DEMO_GAME, headless=not args.headed, max_steps=args.steps,
+                          session_cookie=cookie, lobby=None if args.game else LOBBY)
+            print(f"casino: {'demo game ' + e.game if args.game else 'the fly picks a slot from ' + LOBBY}"
+                  f"  (log -> {e.log_path})")
+        else:
+            e = WebEnv(start=args.start, headless=not args.headed, max_steps=args.steps, session_cookie=cookie)
+        ck = os.path.join(connectome.DATA, "readout" + ("_synthetic" if args.synthetic else "")
+                          + ("_casino" if mode == "casino" else "") + ".npz")
+        return e, Readout(brain.readout.size, e.max_actions, seed=args.seed, path=ck)
+
+    mode = "casino" if args.casino else "browse"
+    env, readout = make_env(mode)
+    control = Control(viz, mode)
     rng = np.random.default_rng(args.seed)
     interrupted = False
     episodes = itertools.count(1) if args.episodes <= 0 else range(1, args.episodes + 1)
@@ -89,11 +96,23 @@ def main():
     try:
         for ep in episodes:
             print(f"episode {ep}/{total_label}")
-            total = run_episode(brain, sim, readout, env, rng, ticks=args.ticks, train=not args.no_train,
-                                viz=viz, episode=ep, pace=args.pace)
-            extra = (f"balance {env.balance} FUN, cumulative dopamine {env.cum_reward:+.2f}" if args.casino
+            try:
+                total = run_episode(brain, sim, readout, env, rng, ticks=args.ticks, train=not args.no_train,
+                                    viz=viz, episode=ep, pace=args.pace, control=control)
+            except SwitchMode as sw:                 # the page asked for the other activity
+                print(f"switching to {sw.mode} mode")
+                env.close()
+                mode = sw.mode
+                env, readout = make_env(mode)
+                control.mode = mode
+                if viz:
+                    viz.set_state(paused=False, mode=mode)
+                continue
+            extra = (f"balance {env.balance} FUN, cumulative dopamine {env.cum_reward:+.2f}" if mode == "casino"
                      else f"unique pages {len(env.visited)}")
             print(f"  return {total:+.1f}, {extra}")
+            if total == 0 and env.step_i == 0:
+                time.sleep(5)                        # page gave nothing to click: do not hammer the site
     except KeyboardInterrupt:
         interrupted = True
         print("interrupted - closing the browser, readout is saved after every episode")

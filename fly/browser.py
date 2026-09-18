@@ -14,7 +14,7 @@ SESSION_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 # With a live session cookie this list is what keeps the fly a spectator - extend it, do not shrink it.
 FORBIDDEN = re.compile(
     r"/(register|login|logout|cashout|deposit|payment|pay|withdraw|wallet|balance|self-exclusion|invite-friends"
-    r"|agreement|profile|cabinet|account|settings|verification|bet-slip|place-bet|play|launch)",
+    r"|agreement|profile|cabinet|account|settings|verification|bet-slip|place-bet|play|launch|online-game)(?![a-z0-9])",
     re.I)
 
 
@@ -116,6 +116,8 @@ class WebEnv:
         return obs, reward, done
 
     def close(self):
-        self.context.close()
-        self.browser.close()
-        self._pw.stop()
+        for f in (self.context.close, self.browser.close, self._pw.stop):
+            try:
+                f()
+            except Exception:      # driver may already be gone (Ctrl+C / supervisor restart)
+                pass

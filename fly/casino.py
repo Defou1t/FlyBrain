@@ -31,6 +31,21 @@ import numpy as np
 from .browser import SESSION_FILE, load_session_cookie
 
 DEMO_GAME = "https://betking.com.ua/casino/?game=olympus-glory-buy-bonus&isMoney=false"
+LOBBY = "https://betking.com.ua/games/top-provider-games-amusnet/"   # Amusnet slots: the only client we can drive
+CARDS_JS = """
+() => {   // lobby slot cards: <div class="game-item" data-app-process-url="/online-game/<slug>/"><img alt="name">
+  const out = [], seen = new Set();
+  for (const el of document.querySelectorAll('.game-item[data-app-process-url]')) {
+    const m = (el.getAttribute('data-app-process-url') || '').match(/online-game\\/([^/]+)/);
+    const r = el.getBoundingClientRect();
+    if (!m || seen.has(m[1]) || r.width < 40 || r.bottom < 0 || r.top > innerHeight) continue;
+    seen.add(m[1]);
+    const img = el.querySelector('img');
+    out.push({ slug: m[1], name: (img && img.alt) || m[1], box: [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)] });
+  }
+  return out;
+}
+"""
 DATA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 LOG = os.path.join(DATA, "dopamine.csv")
 MONEY = re.compile(r"isMoney=true|/(cashier|deposit|withdraw|payment|pay|balance/(add|topup))\b", re.I)
@@ -69,11 +84,16 @@ def _num(s) -> float | None:
 class CasinoEnv:
     def __init__(self, game: str = DEMO_GAME, headless: bool = True, max_actions: int = 32, max_steps: int = 20,
                  viewport=(1280, 800), session_cookie: str | None = None, frame_hint: str = "amusnet",
-                 log_path: str = LOG, spin_timeout: float = 15.0):
+                 log_path: str = LOG, spin_timeout: float = 15.0, lobby: str | None = LOBBY):
         if "ismoney=false" not in game.lower():
             raise ValueError("casino env only runs demo games: the URL must contain isMoney=false")
         from playwright.sync_api import sync_playwright
         self.game = game
+        self.lobby = lobby                           # None -> open `game` directly
+        u = urlparse(game)
+        self.game_base = f"{u.scheme}://{u.netloc}{u.path}"
+        self.phase = "game"
+        self._cards: list[dict] = []
         self.host = urlparse(game).netloc
         self.max_actions = max_actions
         self.max_steps = max_steps
@@ -239,11 +259,31 @@ class CasinoEnv:
         self.page.keyboard.press("Escape")
         self.page.wait_for_timeout(1500)
 
-    # ---- gym-like api -------------------------------------------------------------------------
-    def reset(self) -> dict:
-        self.episode += 1
-        self.step_i = 0
-        self.page.goto(self.game, wait_until="domcontentloaded", timeout=60000)
+    # ---- lobby: the fly looks for a slot itself ---------------------------------------------------
+    def _lobby_cards(self) -> list[dict]:
+        try:
+            cards = self.page.evaluate(CARDS_JS)
+        except Exception:
+            cards = []
+        return cards[: self.max_actions]
+
+    def _open_lobby(self) -> bool:
+        try:
+            self.page.goto(self.lobby, wait_until="domcontentloaded", timeout=60000)
+            self.page.wait_for_timeout(5000)
+            self._close_modals()
+        except Exception:
+            return False
+        self._cards = self._lobby_cards()
+        if not self._cards:
+            return False
+        self.phase = "lobby"
+        self.links = [(f"slot:{c['slug']}", c["name"]) for c in self._cards]
+        self.boxes = [c["box"] for c in self._cards]
+        return True
+
+    def _open_game(self, url: str):
+        self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
         self.page.wait_for_timeout(6000)
         self._close_modals()
         frame = None
@@ -257,11 +297,27 @@ class CasinoEnv:
         if frame is None:
             raise RuntimeError("game iframe not found")
         self._demo_check(frame)
+        self.phase = "game"
         self.balance, _ = self._read()
         self.win, self.bet, self.delta = 0.0, None, 0.0
+
+    # ---- gym-like api -------------------------------------------------------------------------
+    def reset(self) -> dict:
+        self.episode += 1
+        self.step_i = 0
+        if self.lobby and self._open_lobby():        # phase 1: pick a slot from the Amusnet list
+            return self._observe()
+        self._open_game(self.game)
         return self._observe()
 
     def _observe(self) -> dict:
+        if self.phase == "lobby":
+            mask = np.zeros(self.max_actions, bool)
+            mask[: len(self.links)] = True
+            return {"png": self.page.screenshot(type="png"), "mask": mask, "url": self.page.url,
+                    "links": self.links, "boxes": self.boxes, "title": "вибір слота", "session": self.session,
+                    "casino": {"balance": self.balance, "bet": None, "win": None, "delta": 0.0,
+                               "cum": self.cum_reward, "phase": "lobby"}}
         self._buttons = self._bet_buttons()[: self.max_actions]
         self.links = [(f"bet:{b['value']:.2f}", f"ставка {b['value']:.2f} FUN") for b in self._buttons]
         right = self._arrow_box("right") or [0, 0, 0, 0]
@@ -302,6 +358,16 @@ class CasinoEnv:
 
     def step(self, action: int) -> tuple[dict, float, bool]:
         self.step_i += 1
+        if self.phase == "lobby":                    # open the chosen slot in demo mode (reward 0)
+            card = self._cards[action] if action < len(self._cards) else self._cards[0]
+            url = f"{self.game_base}?game={card['slug']}&isMoney=false"
+            print(f"casino: opening slot '{card['name']}' in demo mode")
+            try:
+                self._open_game(url)
+            except Exception as e:                   # not an Amusnet client / no FUN currency: fall back
+                print(f"casino: {card['name']} not playable here ({str(e)[:80]}), falling back to the default slot")
+                self._open_game(self.game)
+            return self._observe(), 0.0, False
         frame = self.game_frame()
         self._demo_check(frame)
         before = self._read()
@@ -338,9 +404,11 @@ class CasinoEnv:
         return obs, reward, done
 
     def close(self):
-        self.context.close()
-        self.browser.close()
-        self._pw.stop()
+        for f in (self.context.close, self.browser.close, self._pw.stop):
+            try:
+                f()
+            except Exception:      # driver may already be gone (Ctrl+C / supervisor restart)
+                pass
 
     # ---- diagnostics ---------------------------------------------------------------------------
     def probe(self, seconds: float = 15.0) -> dict:

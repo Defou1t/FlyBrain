@@ -23,6 +23,12 @@
   #left .remote button { background:#141a2c; color:var(--fg); border:1px solid var(--line); border-radius:12px; padding:2px 10px; font-size:11px; cursor:pointer; }
   #left .remote button.on { color:var(--ok); border-color:#2b5a45; }
   #left .remote code { font-size:10.5px; color:var(--cyan); }
+  #gear { position:fixed; z-index:30; background:#0e1220; border:1px solid var(--line); border-radius:10px; padding:8px; box-shadow:0 12px 40px rgba(0,0,0,.6); display:flex; flex-direction:column; gap:4px; min-width:190px; }
+  #gear .gear-title { font-size:11px; color:var(--dim); letter-spacing:.6px; text-transform:uppercase; padding:2px 6px 4px; }
+  #gear button { background:#141a2c; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:12.5px; text-align:left; cursor:pointer; }
+  #gear button:hover { border-color:var(--cyan); }
+  #gear button.on { color:var(--acc); border-color:#5a4520; }
+  #gl.hit { pointer-events:auto; cursor:pointer; }
   #casino { display:none; }
   #casino #ctiles { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:6px; }
   #casino #ctiles div { background:#0a0d18; border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
@@ -113,12 +119,15 @@
     </div>
     <div class="flylabel" id="flylabel"><b>Drosophila</b> · парит</div>
     <div class="remote" id="remote" style="display:none">
-      <span>доступ коллегам</span>
-      <button id="pubbtn">выкл</button>
-      <code id="lanurl"></code>
-      <span>· туннель</span>
+      <span>туннель для коллег</span>
       <button id="tunbtn">выкл</button>
       <code id="tunurl"></code>
+    </div>
+    <div id="gear" style="display:none">
+      <div class="gear-title">⚙ муха</div>
+      <button id="g-anim">Остановить полёт</button>
+      <button id="g-pause">Прогнать</button>
+      <button id="g-mode">Крутить слоты</button>
     </div>
     <div class="credit">модель: NeuroMechFly v2 (EPFL, Apache-2.0) · перетаскивание — вращать мозг</div>
   </aside>
@@ -262,25 +271,54 @@ function updateColors() {
   if (points) points.geometry.attributes.color.needsUpdate = true;
 }
 // ------------------------------------------------------------------ remote viewing toggle (localhost only)
+let isLocal = false;
 function setupRemote(meta) {
+  isLocal = !!meta.local;
   if (!meta.local) return;
-  const box = $('remote'), btn = $('pubbtn'), url = $('lanurl'), tbtn = $('tunbtn'), turl = $('tunurl');
+  const box = $('remote'), tbtn = $('tunbtn'), turl = $('tunurl');
   box.style.display = 'flex';
-  const show = (on, lan, tun) => {
-    btn.textContent = on ? 'вкл' : 'выкл'; btn.className = on ? 'on' : ''; url.textContent = on ? (meta.lan_urls || [lan]).join('  ') : '';
+  const show = (on, lan, tun) => {   // tunnel only: switching it on also opens remote access
     tbtn.textContent = meta.tunnel_managed ? 'serve' : tun ? 'вкл' : 'выкл'; tbtn.className = tun ? 'on' : ''; turl.textContent = tun || '';
     tbtn.disabled = !!meta.tunnel_managed; tbtn.title = meta.tunnel_managed ? 'туннелем управляет fly.serve' : '';
   };
   window.showRemote = show;
   show(meta.public, meta.lan_url, meta.tunnel_url);
-  btn.onclick = async () => { const r = await (await fetch('/admin/public?on=' + (btn.className === 'on' ? 0 : 1))).json(); show(r.public, r.lan_url, r.tunnel_url); log(r.public ? `доступ коллегам включён: ${r.lan_url}` : 'доступ коллегам выключен'); };
   tbtn.onclick = async () => {
     const on = tbtn.className !== 'on'; tbtn.textContent = on ? '…' : 'выкл';
     const r = await (await fetch('/admin/tunnel?on=' + (on ? 1 : 0))).json();
     show(r.public, r.lan_url, r.tunnel_url);
     log(r.error ? `туннель: ${r.error}` : r.tunnel_url ? `туннель открыт: ${r.tunnel_url}` : 'туннель закрыт', r.error ? 'bad' : '');
   };
+  if (meta.state) applyState(meta.state);
 }
+
+// ------------------------------------------------------------------ click on the fly -> gear menu
+const flyCtl = { anim: 'fly', paused: false, mode: 'browse' };
+try { flyCtl.anim = localStorage.getItem('fly.anim') || 'fly'; } catch (e) {}
+function applyState(s) {
+  flyCtl.paused = !!s.paused; flyCtl.mode = s.mode || 'browse';
+  $('g-pause').textContent = flyCtl.paused ? 'Вернуть' : 'Прогнать'; $('g-pause').className = flyCtl.paused ? 'on' : '';
+  $('g-mode').textContent = flyCtl.mode === 'casino' ? 'Гулять по сайту' : 'Крутить слоты'; $('g-mode').className = flyCtl.mode === 'casino' ? 'on' : '';
+  $('g-anim').textContent = flyCtl.anim === 'walk' ? 'Возобновить полёт' : 'Остановить полёт'; $('g-anim').className = flyCtl.anim === 'walk' ? 'on' : '';
+  if (flyState.mode === 'hover' || flyState.mode === 'walk') flyState.mode = flyCtl.anim === 'walk' ? 'walk' : 'hover';
+  if (flyCtl.paused) setFlyLabel('прогнана — сидит и ждёт'); else if (flyCtl.mode === 'casino') setFlyLabel('крутит слоты (демо-счёт)');
+}
+const flyScreen = new THREE.Vector3();
+function flyOnScreen() { flyScreen.copy(flyRoot.position).project(camera); return [(flyScreen.x + 1) / 2 * W, (1 - flyScreen.y) / 2 * H]; }
+addEventListener('mousemove', e => {
+  if (!isLocal || !fly.ready) return;
+  const [fx, fy] = flyOnScreen(), r = Math.min(120, flyRoot.scale.x * fly.len * 0.5);
+  glCanvas.classList.toggle('hit', Math.hypot(e.clientX - fx, e.clientY - fy) < r);
+});
+glCanvas.addEventListener('click', e => {
+  const g = $('gear'); if (g.style.display === 'flex') { g.style.display = 'none'; return; }
+  g.style.display = 'flex'; g.style.left = Math.min(W - 210, e.clientX + 12) + 'px'; g.style.top = Math.min(H - 150, e.clientY - 20) + 'px';
+});
+addEventListener('pointerdown', e => { if (!e.target.closest('#gear') && e.target !== glCanvas) $('gear').style.display = 'none'; });
+async function cmd(do_) { const r = await (await fetch('/admin/cmd?do=' + do_)).json(); log(`команда мухе: ${do_}`, 'act'); return r; }
+$('g-anim').onclick = () => { flyCtl.anim = flyCtl.anim === 'walk' ? 'fly' : 'walk'; try { localStorage.setItem('fly.anim', flyCtl.anim); } catch (e) {} applyState(flyCtl); log(flyCtl.anim === 'walk' ? 'муха ходит пешком' : 'муха снова летает'); };
+$('g-pause').onclick = () => cmd(flyCtl.paused ? 'resume' : 'pause');
+$('g-mode').onclick = () => cmd(flyCtl.mode === 'casino' ? 'browse' : 'casino');
 const pad = $('dragpad');
 pad.addEventListener('pointerdown', e => { spin.drag = [e.clientX, e.clientY]; spin.idle = 0; pad.setPointerCapture(e.pointerId); });
 pad.addEventListener('pointerup', () => spin.drag = null);
@@ -342,7 +380,11 @@ new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
 const flyState = { mode: 'hover', pos: new THREE.Vector3(), home: new THREE.Vector3(), from: null, to: null, t0: 0, dur: 1.3, after: 'hover', look: new THREE.Vector3() };
 const landedQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI)
   .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));   // back to the camera, head up the page
-function flyTo(target, after, dur) { flyState.from = flyState.pos.clone(); flyState.to = target; flyState.t0 = performance.now(); flyState.dur = dur; flyState.mode = 'fly'; flyState.after = after; }
+function flyTo(target, after, dur) {
+  const walking = flyCtl.anim === 'walk';
+  flyState.from = flyState.pos.clone(); flyState.to = target; flyState.t0 = performance.now(); flyState.dur = walking ? dur * 1.8 : dur;
+  flyState.mode = 'fly'; flyState.walk = walking; flyState.after = (after === 'hover' && walking) ? 'walk' : after;
+}
 function takeOff() { if (flyState.mode === 'landed') flyTo(flyState.home.clone(), 'hover', 1.0); }
 
 // ------------------------------------------------------------------ layout: pin brain + fly home to the left column
@@ -353,7 +395,7 @@ function layout() {
   brainGroup.position.copy(s2w(cx, r.top + r.height * 0.42)); brainGroup.scale.setScalar(S);
   flyState.home.copy(s2w(cx, r.top + r.height * 0.82));
   if (fly.ready) flyRoot.scale.setScalar(Math.min(r.width * 0.45, 190) / fly.len);
-  if (flyState.mode === 'hover') flyState.pos.copy(flyState.home);
+  if (flyState.mode === 'hover' || flyState.mode === 'walk') flyState.pos.copy(flyState.home);
   fitOverlay();
 }
 addEventListener('resize', resize);
@@ -503,7 +545,8 @@ es.onmessage = ev => {
     $('status').textContent = m.casino ? `демо-счёт ${fmt(m.casino.balance)} FUN · ставка ${fmt(m.casino.bet)} · последний выигрыш ${fmt(m.casino.win)}`
                                        : 'смотрит на страницу — сетчатка → зрительные доли → нисходящие нейроны';
     showCasino(m.casino);
-    renderLinks(null); drawOverlay(); takeOff(); setFlyLabel('смотрит');
+    renderLinks(null); drawOverlay(); takeOff();
+    setFlyLabel(flyCtl.paused ? 'прогнана — сидит и ждёт' : m.casino && m.casino.phase === 'lobby' ? 'ищет слот' : m.casino ? 'крутит слоты (демо-счёт)' : 'смотрит');
     log(m.casino ? `демо-счёт: ${fmt(m.casino.balance)} FUN, ${m.links.length} действий (спин + ставки)`
                  : `страница: ${m.url.replace(/^https?:\/\/[^/]+/, '') || '/'}  (${m.links.length} ссылок)`);
   } else if (m.t === 'decision') {
@@ -532,6 +575,8 @@ es.onmessage = ev => {
     if (window.showRemote) showRemote(m.on, m.lan_url, m.tunnel_url);
   } else if (m.t === 'reload') {
     location.reload();
+  } else if (m.t === 'state') {
+    applyState(m);
   }
 };
 // the fly restarts when its code is updated (fly.serve): wait for the server, then reload the page
@@ -547,25 +592,39 @@ function animate(now) {
   requestAnimationFrame(animate);
   const t = now / 1000, fs = flyState;
   if (fs.mode === 'fly') {
-    const s = Math.min(1, (now - fs.t0) / (fs.dur * 1000)), e = ease(s);
-    fs.pos.lerpVectors(fs.from, fs.to, e); fs.pos.y += Math.sin(Math.PI * e) * 90; fs.pos.z += Math.sin(Math.PI * e) * 60;
-    tmp.copy(fs.to).sub(fs.from); tmp.y += Math.cos(Math.PI * e) * 90 * Math.PI / 2; fs.look.copy(fs.pos).add(tmp.normalize());
-    flyRoot.position.copy(fs.pos); flyRoot.lookAt(fs.look); flyRoot.rotateZ(Math.sin(Math.PI * e) * (fs.to.x > fs.from.x ? -0.35 : 0.35));
+    const s = Math.min(1, (now - fs.t0) / (fs.dur * 1000)), e = fs.walk ? s : ease(s);
+    fs.pos.lerpVectors(fs.from, fs.to, e);
+    if (fs.walk) {   // walking: straight line over the screen, a little waddle, wings folded
+      fs.pos.y += Math.sin(s * 40) * 2; tmp.copy(fs.to).sub(fs.from); fs.look.copy(fs.pos).add(tmp.normalize());
+      flyRoot.position.copy(fs.pos); flyRoot.quaternion.slerp(landedQ, 0.2);
+      flyRoot.rotateZ(Math.atan2(tmp.y, tmp.x) - Math.PI / 2);   // head towards the walking direction
+    } else {
+      fs.pos.y += Math.sin(Math.PI * e) * 90; fs.pos.z += Math.sin(Math.PI * e) * 60;
+      tmp.copy(fs.to).sub(fs.from); tmp.y += Math.cos(Math.PI * e) * 90 * Math.PI / 2; fs.look.copy(fs.pos).add(tmp.normalize());
+      flyRoot.position.copy(fs.pos); flyRoot.lookAt(fs.look); flyRoot.rotateZ(Math.sin(Math.PI * e) * (fs.to.x > fs.from.x ? -0.35 : 0.35));
+    }
     if (s >= 1) {
       fs.mode = fs.after;
       if (fs.mode === 'landed') { const b = links[chosen] && links[chosen].box; if (b) { const [rx, ry] = boxCenter(b); ripple = { t0: now, x: rx, y: ry }; } setFlyLabel('села на ссылку'); }
     }
   } else if (fs.mode === 'hover') {
+    if (flyCtl.anim === 'walk') fs.mode = 'walk';
     fs.pos.set(fs.home.x + Math.sin(t * 0.7) * 22, fs.home.y + Math.sin(t * 1.9) * 9, 20 + Math.cos(t * 0.5) * 15);
     fs.look.set(fs.pos.x + Math.sin(t * 0.45) * 0.6, fs.pos.y - 0.25, fs.pos.z + 1);
     flyRoot.position.copy(fs.pos); flyRoot.lookAt(fs.look);
+  } else if (fs.mode === 'walk') {   // grounded at home: paces slowly left-right, seen from above
+    if (flyCtl.anim !== 'walk') fs.mode = 'hover';
+    const wx = Math.sin(t * 0.35) * 60;
+    fs.pos.set(fs.home.x + wx, fs.home.y - 30 + Math.sin(t * 6) * 1.2, 4);
+    flyRoot.position.copy(fs.pos); flyRoot.quaternion.slerp(landedQ, 0.15); flyRoot.rotateZ(Math.cos(t * 0.35) > 0 ? -Math.PI / 2 : Math.PI / 2);
   } else if (fs.mode === 'landed') {
     flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t * 14) * 0.6;
     flyRoot.quaternion.slerp(landedQ, 0.25);
   }
-  // wings: folded over the back when landed, spread sideways and beating in the air
-  fly.spread = (fly.spread || 0) + (((fs.mode === 'landed') ? 0 : 1.25) - (fly.spread || 0)) * 0.12;
-  const flap = fs.mode === 'landed' ? 0 : Math.sin(t * 95) * 0.55 * Math.min(1, fly.spread);
+  // wings: folded over the back when landed or walking, spread sideways and beating in the air
+  const grounded = fs.mode === 'landed' || fs.mode === 'walk' || (fs.mode === 'fly' && fs.walk);
+  fly.spread = (fly.spread || 0) + ((grounded ? 0 : 1.25) - (fly.spread || 0)) * 0.12;
+  const flap = grounded ? 0 : Math.sin(t * 95) * 0.55 * Math.min(1, fly.spread);
   fly.wings.forEach(w => { qA.setFromAxisAngle(AX_Z, w.s * flap); qB.setFromAxisAngle(AX_Y, -w.s * fly.spread); w.pivot.quaternion.copy(qA).multiply(qB); });
   if (ripple) drawOverlay();
   if (points) {

@@ -75,6 +75,8 @@ class VizServer:
         self.public = public
         self.tunnel = None
         self.tunnel_provider = tunnel_provider
+        self.commands: queue.Queue = queue.Queue()          # page -> agent loop
+        self.state = {"paused": False, "mode": "browse"}    # what the fly is doing now
         self.clients: list[queue.Queue] = []
         self.lock = threading.Lock()
 
@@ -126,9 +128,13 @@ class VizServer:
                 self.wfile.write(body)
 
             def do_GET(self):
-                # viewers coming through the Cloudflare tunnel connect from 127.0.0.1 but carry proxy headers
-                proxied = bool(self.headers.get("Cf-Connecting-Ip") or self.headers.get("X-Forwarded-For"))
-                local = self.client_address[0] in LOCAL and not proxied
+                # viewers coming through a tunnel connect from 127.0.0.1: they are told apart by proxy headers
+                # and by the Host they asked for (the tunnel's hostname, not 127.0.0.1/localhost)
+                proxied = bool(self.headers.get("Cf-Connecting-Ip") or self.headers.get("X-Forwarded-For")
+                               or self.headers.get("X-Forwarded-Host"))
+                host = (self.headers.get("Host") or "").split(":")[0].lower()
+                local = (self.client_address[0] in LOCAL and not proxied
+                         and host in ("127.0.0.1", "localhost", "::1", "[::1]"))
                 if not local and not server.public:
                     return self._send("доступ выключен / remote access is off".encode(), "text/plain; charset=utf-8", 403)
                 u = urlparse(self.path)
@@ -149,8 +155,17 @@ class VizServer:
                     meta = dict(server.meta, local=local, public=server.public,
                                 lan_url=f"http://{server.lan}:{server.port}/",
                                 lan_urls=[f"http://{ip}:{server.port}/" for ip in server.ips],
-                                tunnel_url=server.tunnel_url, tunnel_managed=server.tunnel_managed)
+                                tunnel_url=server.tunnel_url, tunnel_managed=server.tunnel_managed,
+                                state=server.state)
                     self._send(json.dumps(meta).encode(), "application/json")
+                elif u.path == "/admin/cmd":          # page -> fly: pause / resume / casino / browse
+                    if not local:
+                        return self._send(b"forbidden", "text/plain", 403)
+                    do = parse_qs(u.query).get("do", [""])[0]
+                    if do not in ("pause", "resume", "casino", "browse"):
+                        return self._send(b"unknown command", "text/plain", 400)
+                    server.commands.put(do)
+                    self._send(json.dumps({"queued": do, "state": server.state}).encode(), "application/json")
                 elif u.path in ("/admin/public", "/admin/tunnel"):
                     if not local:
                         return self._send(b"forbidden", "text/plain", 403)
@@ -193,7 +208,13 @@ class VizServer:
                 else:
                     self.send_error(404)
 
-        self.httpd = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+        class Server(ThreadingHTTPServer):
+            allow_reuse_address = False      # Windows would happily let two flies share the port otherwise
+
+        try:
+            self.httpd = Server(("0.0.0.0", port), Handler)
+        except OSError as e:
+            raise SystemExit(f"viz: port {port} is already in use (another fly running?) - pick --port: {e}")
         self.httpd.daemon_threads = True
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         threading.Thread(target=self._watch_page, daemon=True).start()
@@ -305,3 +326,7 @@ class VizServer:
 
     def reward(self, r: float, total: float, done: bool, casino: dict | None = None):
         self.send({"t": "reward", "r": r, "total": total, "done": done, "casino": casino})
+
+    def set_state(self, **kw):
+        self.state.update(kw)
+        self.send({"t": "state", **self.state})
