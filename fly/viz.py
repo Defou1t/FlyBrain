@@ -149,7 +149,7 @@ class VizServer:
                     meta = dict(server.meta, local=local, public=server.public,
                                 lan_url=f"http://{server.lan}:{server.port}/",
                                 lan_urls=[f"http://{ip}:{server.port}/" for ip in server.ips],
-                                tunnel_url=server.tunnel_url)
+                                tunnel_url=server.tunnel_url, tunnel_managed=server.tunnel_managed)
                     self._send(json.dumps(meta).encode(), "application/json")
                 elif u.path in ("/admin/public", "/admin/tunnel"):
                     if not local:
@@ -196,6 +196,7 @@ class VizServer:
         self.httpd = ThreadingHTTPServer(("0.0.0.0", port), Handler)
         self.httpd.daemon_threads = True
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        threading.Thread(target=self._watch_page, daemon=True).start()
         remote = ", ".join(f"http://{ip}:{port}/" for ip in self.ips)
         print(f"viz: http://127.0.0.1:{port}/   remote: {remote} "
               f"({'ON' if public else 'off - toggle in the page or GET /admin/public?on=1'})")
@@ -204,12 +205,21 @@ class VizServer:
 
     @property
     def tunnel_url(self) -> str | None:
-        return self.tunnel.url if self.tunnel and self.tunnel.alive else None
+        if self.tunnel and self.tunnel.alive:
+            return self.tunnel.url
+        return os.environ.get("FLY_TUNNEL_URL") or None      # tunnel owned by fly.serve (survives restarts)
+
+    @property
+    def tunnel_managed(self) -> bool:
+        return bool(os.environ.get("FLY_TUNNEL_URL"))
 
     def set_tunnel(self, on: bool, provider: str | None = None):
         """Start/stop a public tunnel (localhost.run over ssh, or cloudflared); starting also switches
         remote access on. Viewers through the tunnel count as remote (proxy headers), never as admins."""
         from .tunnel import Tunnel
+        if self.tunnel_managed:
+            print("viz: the tunnel is owned by fly.serve - stop/start it there")
+            return
         if on:
             if not self.tunnel_url:
                 if self.tunnel:
@@ -241,6 +251,22 @@ class VizServer:
                         q.put_nowait(None)
                     except queue.Full:
                         pass
+
+    def _watch_page(self):
+        """viz/index.html edited -> tell open pages to reload (no restart needed for the page itself)."""
+        path = os.path.join(STATIC, "index.html")
+        last = os.stat(path).st_mtime
+        while True:
+            time.sleep(2)
+            try:
+                m = os.stat(path).st_mtime
+            except OSError:
+                continue
+            if m != last:
+                last = m
+                time.sleep(1)                       # let the editor finish writing
+                print("viz: index.html changed -> reloading open pages")
+                self.send({"t": "reload"})
 
     def wait_for_client(self, timeout: float = 30.0):
         t0 = time.time()

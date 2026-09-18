@@ -1,8 +1,10 @@
-"""CLI.  python -m fly.run --synthetic --episodes 3 --headed --viz"""
+"""CLI.  python -m fly.run --synthetic --episodes 3 --headed --viz   (--episodes 0 = run forever)"""
 from __future__ import annotations
 
 import argparse
+import itertools
 import os
+import signal
 import sys
 import time
 
@@ -15,10 +17,14 @@ from .browser import SESSION_FILE, START, WebEnv, load_session_cookie
 from .motor import Readout
 
 
+def _interrupt(*_):
+    raise KeyboardInterrupt
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--synthetic", action="store_true", help="random 20k-neuron brain instead of MaleCNS")
-    ap.add_argument("--episodes", type=int, default=1)
+    ap.add_argument("--episodes", type=int, default=1, help="0 = forever (used by fly.serve)")
     ap.add_argument("--steps", type=int, default=8, help="clicks per episode")
     ap.add_argument("--ticks", type=int, default=96, help="LIF ticks per decision")
     ap.add_argument("--headed", action="store_true", help="show the browser window")
@@ -40,6 +46,8 @@ def main():
                          "lhr = localhost.run over ssh (default), cloudflare = cloudflared quick tunnel")
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(signal, "SIGBREAK"):   # fly.serve stops us with Ctrl+Break -> same clean path as Ctrl+C
+        signal.signal(signal.SIGBREAK, _interrupt)
 
     t0 = time.time()
     brain = connectome.synthetic(seed=args.seed) if args.synthetic else connectome.load()
@@ -60,7 +68,7 @@ def main():
                         tunnel_provider=args.tunnel or "lhr")
         if args.tunnel:
             viz.set_tunnel(True, args.tunnel)
-        viz.wait_for_client()
+        viz.wait_for_client(timeout=3 if args.episodes <= 0 else 30)   # supervised: do not wait for viewers
 
     cookie = load_session_cookie(args.session_file)
     if args.casino:
@@ -75,27 +83,35 @@ def main():
                         + ("_casino" if args.casino else "") + ".npz")
     readout = Readout(brain.readout.size, env.max_actions, seed=args.seed, path=ckpt)
     rng = np.random.default_rng(args.seed)
+    interrupted = False
+    episodes = itertools.count(1) if args.episodes <= 0 else range(1, args.episodes + 1)
+    total_label = "∞" if args.episodes <= 0 else str(args.episodes)
     try:
-        for ep in range(args.episodes):
-            print(f"episode {ep + 1}/{args.episodes}")
+        for ep in episodes:
+            print(f"episode {ep}/{total_label}")
             total = run_episode(brain, sim, readout, env, rng, ticks=args.ticks, train=not args.no_train,
-                                viz=viz, episode=ep + 1, pace=args.pace)
+                                viz=viz, episode=ep, pace=args.pace)
             extra = (f"balance {env.balance} FUN, cumulative dopamine {env.cum_reward:+.2f}" if args.casino
                      else f"unique pages {len(env.visited)}")
             print(f"  return {total:+.1f}, {extra}")
+    except KeyboardInterrupt:
+        interrupted = True
+        print("interrupted - closing the browser, readout is saved after every episode")
     finally:
         env.close()
-    if viz:
+    if viz and not interrupted:
         print("episodes done; visualiser still up — Ctrl+C to exit")
         try:
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
             pass
-        finally:
-            if viz.tunnel:
-                viz.tunnel.stop()
+    if viz and viz.tunnel:
+        viz.tunnel.stop()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:     # Ctrl+C / fly.serve restart during start-up: leave quietly
+        pass

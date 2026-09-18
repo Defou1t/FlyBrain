@@ -268,7 +268,8 @@ function setupRemote(meta) {
   box.style.display = 'flex';
   const show = (on, lan, tun) => {
     btn.textContent = on ? 'вкл' : 'выкл'; btn.className = on ? 'on' : ''; url.textContent = on ? (meta.lan_urls || [lan]).join('  ') : '';
-    tbtn.textContent = tun ? 'вкл' : 'выкл'; tbtn.className = tun ? 'on' : ''; turl.textContent = tun || '';
+    tbtn.textContent = meta.tunnel_managed ? 'serve' : tun ? 'вкл' : 'выкл'; tbtn.className = tun ? 'on' : ''; turl.textContent = tun || '';
+    tbtn.disabled = !!meta.tunnel_managed; tbtn.title = meta.tunnel_managed ? 'туннелем управляет fly.serve' : '';
   };
   window.showRemote = show;
   show(meta.public, meta.lan_url, meta.tunnel_url);
@@ -529,9 +530,14 @@ es.onmessage = ev => {
     if (m.done) log(`эпизод завершён, сумма ${total.toFixed(1)}`);
   } else if (m.t === 'public') {
     if (window.showRemote) showRemote(m.on, m.lan_url, m.tunnel_url);
+  } else if (m.t === 'reload') {
+    location.reload();
   }
 };
-es.onerror = () => { $('wait').style.display = 'block'; $('wait').textContent = 'связь с симуляцией потеряна'; };
+// the fly restarts when its code is updated (fly.serve): wait for the server, then reload the page
+let lost = false;
+es.onerror = () => { lost = true; $('wait').style.display = 'block'; $('wait').textContent = 'муха перезапускается… переподключение'; };
+es.onopen = () => { if (lost) location.reload(); };
 
 // ------------------------------------------------------------------ animation loop
 const ease = s => s < 0.5 ? 2 * s * s : 1 - Math.pow(-2 * s + 2, 2) / 2;
