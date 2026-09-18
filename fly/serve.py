@@ -26,6 +26,94 @@ WATCH_DIR = os.path.join(ROOT, "fly")
 SUPERVISOR_ONLY = {"--tunnel", "--public", "--port", "--episodes"}
 
 
+def bind_children_to_me():
+    """Windows: put this process into a Job Object with KILL_ON_JOB_CLOSE. Everything it spawns (the
+    fly, its Chromium, ngrok/ssh) inherits the job and is killed the moment the supervisor dies for any
+    reason - Ctrl+C, closed terminal, crash - so no orphan can keep the port."""
+    if os.name != "nt":
+        return
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.windll.kernel32
+    k32.CreateJobObjectW.restype = wintypes.HANDLE
+    k32.GetCurrentProcess.restype = wintypes.HANDLE          # pseudo-handle -1 must stay 64-bit
+    k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    k32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    job = k32.CreateJobObjectW(None, None)
+    if not job:
+        return
+
+    class LIMIT(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                    ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                    ("SchedulingClass", wintypes.DWORD)]
+
+    class IO(ctypes.Structure):
+        _fields_ = [(n, ctypes.c_uint64) for n in ("ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+                                                    "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+
+    class EXT(ctypes.Structure):
+        _fields_ = [("BasicLimitInformation", LIMIT), ("IoInfo", IO), ("ProcessMemoryLimit", ctypes.c_size_t),
+                    ("JobMemoryLimit", ctypes.c_size_t), ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                    ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+    info = EXT()
+    info.BasicLimitInformation.LimitFlags = 0x2000          # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    ok = k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info))   # ExtendedLimitInformation
+    if ok and k32.AssignProcessToJobObject(job, k32.GetCurrentProcess()):
+        globals()["_JOB"] = job                                # keep the handle alive for the whole run
+    else:
+        print("serve: could not create the job object; children may outlive the supervisor")
+
+
+def listener_pid(port: int) -> int | None:
+    """PID listening on the port (Windows netstat / Linux ss)."""
+    try:
+        if os.name == "nt":
+            out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, timeout=10).stdout
+            for line in out.splitlines():
+                parts = line.split()
+                if len(parts) >= 5 and parts[1].endswith(f":{port}") and parts[3] == "LISTENING":
+                    return int(parts[4])
+        else:
+            out = subprocess.run(["ss", "-ltnp"], capture_output=True, text=True, timeout=10).stdout
+            for line in out.splitlines():
+                if f":{port} " in line and "pid=" in line:
+                    return int(line.split("pid=")[1].split(",")[0])
+    except Exception:
+        pass
+    return None
+
+
+def free_port(port: int):
+    """A stale fly (a worker whose supervisor died earlier) still holding the port is ours to kill;
+    anything else on the port is not - say so and stop."""
+    pid = listener_pid(port)
+    if not pid or pid == os.getpid():
+        return
+    cmd = ""
+    try:
+        if os.name == "nt":   # (wmic is gone on recent Windows 11 builds)
+            cmd = subprocess.run(["powershell", "-NoProfile", "-Command",
+                                  f"(Get-CimInstance Win32_Process -Filter 'ProcessId={pid}').CommandLine"],
+                                 capture_output=True, text=True, timeout=15).stdout.strip()
+        else:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                cmd = f.read().replace(b"\\0", b" ").decode(errors="replace")
+    except Exception:
+        pass
+    if "fly.run" in cmd or "fly.serve" in cmd:
+        print(f"serve: port {port} is held by a stale fly (pid {pid}) - stopping it")
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"] if os.name == "nt" else ["kill", "-9", str(pid)],
+                       capture_output=True)
+        time.sleep(2)
+    else:
+        raise SystemExit(f"serve: port {port} is in use by another program (pid {pid}: {cmd[:80] or '?'}); "
+                         f"pick another --port")
+
+
 def snapshot() -> dict[str, float]:
     out = {}
     for name in os.listdir(WATCH_DIR):
@@ -108,6 +196,8 @@ class Worker:
 def main():
     mine, rest = split_args(sys.argv[1:])
     port = int(mine.get("port", 8765))
+    bind_children_to_me()
+    free_port(port)
     if "--viz" not in rest:
         rest.append("--viz")
     worker_args = [*rest, "--episodes", str(mine.get("episodes", 0)), "--port", str(port), "--no-open"]
