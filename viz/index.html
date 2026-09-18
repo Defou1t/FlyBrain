@@ -205,7 +205,7 @@ async function loadBrain() {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  points = new THREE.Points(geo, new THREE.PointsMaterial({ size: 2.2, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+  points = new THREE.Points(geo, new THREE.PointsMaterial({ size: 1.7, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }));
   brainGroup.add(points);
   updateColors();
   $('hudline').textContent = `${meta.total.toLocaleString('ru')} нейронов · ${meta.synapses.toLocaleString('ru')} синапсов · ${N.toLocaleString('ru')} сом на экране`;
