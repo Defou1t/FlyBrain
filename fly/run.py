@@ -118,6 +118,14 @@ def main():
             extra = (f"balance {env.balance} FUN, cumulative dopamine {env.cum_reward:+.2f}" if mode == "casino"
                      else f"unique pages {len(env.visited)}")
             print(f"  return {total:+.1f}, {extra}")
+            if mode == "casino" and getattr(env, "broke", False) and control.viz:
+                try:
+                    control.wait_for_refill(brain, sim, env, ticks=max(8, args.ticks // 3))
+                except SwitchMode as sw:
+                    control.broke = False
+                    switch(sw.mode)
+                    continue
+                continue                             # refilled: a fresh episode picks a slot again
             if mode == "casino" and getattr(env, "rest", False):
                 return_to = "casino"                 # lost its appetite: one walk around the site, then back
                 switch("browse")

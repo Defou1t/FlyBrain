@@ -97,6 +97,7 @@ class CasinoEnv:
         self.cur_slug, self.cur_name = None, ""
         self.rest = False                            # set when the fly has lost its appetite: take a walk
         self.new_events: list[dict] = []
+        self.last_png: bytes | None = None
         u = urlparse(game)
         self.game_base = f"{u.scheme}://{u.netloc}{u.path}"
         self.phase = "game"
@@ -309,6 +310,10 @@ class CasinoEnv:
         self.win, self.bet, self.delta = 0.0, None, 0.0
 
     # ---- gym-like api -------------------------------------------------------------------------
+    @property
+    def broke(self) -> bool:
+        return self.drive.broke
+
     def reset(self) -> dict:
         self.episode += 1
         self.step_i = 0
@@ -356,10 +361,11 @@ class CasinoEnv:
         if self.phase == "lobby":
             mask = np.zeros(self.max_actions, bool)
             mask[: len(self.links)] = True
-            return {"png": self.page.screenshot(type="png"), "mask": mask, "url": self.page.url,
+            self.last_png = self.page.screenshot(type="png")
+            return {"png": self.last_png, "mask": mask, "url": self.page.url,
                     "links": self.links, "boxes": self.boxes, "title": "вибір слота", "session": self.session,
-                    "casino": {"balance": self.balance, "bet": None, "win": None, "delta": 0.0,
-                               "cum": self.cum_reward, "phase": "lobby", "drive": self.drive.snapshot(),
+                    "casino": {"balance": self.drive.bank, "demo": self.balance, "bet": None, "win": None,
+                               "delta": 0.0, "cum": self.cum_reward, "phase": "lobby", "drive": self.drive.snapshot(),
                                "events": []}}
         self._buttons = self._bet_buttons()[: self.max_actions]
         self.links = [(f"bet:{b['value']:.2f}", f"ставка {b['value']:.2f} FUN") for b in self._buttons]
@@ -368,15 +374,18 @@ class CasinoEnv:
         self.boxes = [[int(b["x"]), int(b["y"]), int(b["w"]), int(b["h"])] if b["visible"] else right
                       for b in self._buttons]
         mask = np.zeros(self.max_actions, bool)
-        mask[: len(self.links)] = True
+        for i, b in enumerate(self._buttons):            # only stakes the fly can still afford
+            mask[i] = b["value"] <= self.drive.bank + 1e-9
         try:
             title = self.page.title()
         except Exception:
             title = ""
         bal = (self.balance or 0.0) + (self.win or 0.0)   # pending win counts: it is credited at the next spin
-        return {"png": self.page.screenshot(type="png"), "mask": mask, "url": self.page.url, "links": self.links,
+        self.last_png = self.page.screenshot(type="png")
+        return {"png": self.last_png, "mask": mask, "url": self.page.url, "links": self.links,
                 "boxes": self.boxes, "title": title, "session": self.session,
-                "casino": {"balance": bal if self.balance is not None else None, "bet": self.bet, "win": self.win,
+                "casino": {"balance": self.drive.bank, "demo": bal if self.balance is not None else None,
+                           "bet": self.bet, "win": self.win,
                            "delta": self.delta, "cum": self.cum_reward, "phase": "game",
                            "drive": self.drive.snapshot(), "events": self.new_events}}
 
@@ -445,11 +454,13 @@ class CasinoEnv:
             csv.writer(f).writerow([f"{time.time():.1f}", self.episode, self.step_i, self.links[action][0], self.bet,
                                     before[0], after[0], f"{win:.2f}", f"{self.delta:.2f}", f"{reward:.3f}",
                                     f"{max(reward, 0):.3f}", f"{max(-reward, 0):.3f}", f"{self.cum_reward:.3f}"])
-        self.new_events = self.drive.spin(self.bet, win, reward, (self.balance or 0.0) + win)
+        self.new_events = self.drive.spin(self.bet, win, reward, None)
         obs = self._observe()
-        broke = self.balance is not None and self.balance + win < self.bet
-        switch = self.drive.wants_switch()
-        self.rest = self.drive.wants_rest()
+        broke = self.drive.broke or not obs["mask"].any()
+        if broke:
+            print(f"casino: the fly is broke (bank {self.drive.bank:.2f} FUN) - it stops and waits for a refill")
+        switch = self.drive.wants_switch() and not broke
+        self.rest = self.drive.wants_rest() and not broke
         if self.rest:
             print(f"casino: appetite is gone (desire {self.drive.desire:.2f}) - the fly goes for a walk")
         done = self.step_i >= self.max_steps or broke or switch or self.rest

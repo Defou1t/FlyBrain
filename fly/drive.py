@@ -25,12 +25,14 @@ LOSS_STREAK_SWITCH = 6 # this many losses in a row -> change the slot
 REST_DESIRE = 0.10     # below this the fly leaves the casino for a walk
 SWITCH_DESIRE = 0.18   # below this it tries another slot
 MAX_BET = 40.0
+BANK = 50_000.0      # the fly's own money: it believes it has this much and spends it across slots
 
 
 class Drive:
     def __init__(self, path: str = STATE, events_path: str = EVENTS):
         self.path, self.events_path = path, events_path
         self.desire = 0.6
+        self.bank = BANK            # virtual balance, persists across slots and restarts
         self.slots: dict[str, dict] = {}
         self.events: list[dict] = []
         self.slot: str | None = None
@@ -52,6 +54,7 @@ class Drive:
             with open(self.path, encoding="utf-8") as f:
                 d = json.load(f)
             self.desire = float(d.get("desire", self.desire))
+            self.bank = float(d.get("bank", BANK))
             self.slots = d.get("slots", {})
         except (OSError, ValueError):
             pass
@@ -64,7 +67,8 @@ class Drive:
     def _save(self):
         os.makedirs(DATA, exist_ok=True)
         with open(self.path, "w", encoding="utf-8") as f:
-            json.dump({"desire": self.desire, "slots": self.slots}, f, ensure_ascii=False, indent=1)
+            json.dump({"desire": self.desire, "bank": round(self.bank, 2), "slots": self.slots}, f,
+                      ensure_ascii=False, indent=1)
 
     def _event(self, kind: str, balance: float | None, **extra) -> dict:
         pct = (balance - self.start) / self.start if (balance is not None and self.start) else None
@@ -81,9 +85,9 @@ class Drive:
         return ev
 
     # ---- slot sessions ------------------------------------------------------------------------
-    def open_slot(self, slug: str, name: str, balance: float | None):
+    def open_slot(self, slug: str, name: str, balance: float | None = None):
         self.slot, self.name = slug, name
-        self.start = balance
+        self.start = self.bank                      # milestones are measured on the fly's own bank
         self.opened_at = time.time()
         self.session_spins = 0
         self.session_net = 0.0
@@ -98,6 +102,8 @@ class Drive:
         """Update after one spin. Returns the notable events it produced (goal / lucky / bust / switch)."""
         events = []
         s = self.slots.get(self.slot)
+        self.bank = max(0.0, round(self.bank - bet + win, 2))
+        balance = self.bank
         self.session_spins += 1
         self.session_net += win - bet
         if s:
@@ -138,13 +144,16 @@ class Drive:
                 events.append(self._event("goal", balance, gain=round(balance - self.start, 2)))
                 self.start = balance                     # re-base: the next +15 % counts from here
                 self.desire = min(1.0, self.desire + 0.2)
-            elif pct <= BUST_PCT or (balance < 0.1):
+            elif pct <= BUST_PCT and not self.broke:
                 if s:
                     s["busts"] += 1
                     s["unlucky"] = True
                 events.append(self._event("bust", balance, loss=round(self.start - balance, 2)))
                 self.desire = max(0.0, self.desire - 0.3)
                 self.reason = "слив"
+        if self.broke:
+            events.append(self._event("broke", balance))
+            self.reason = "деньги кончились"
         self._save()
         return events
 
@@ -159,7 +168,20 @@ class Drive:
         return self.reason == "слив"
 
     def wants_rest(self) -> bool:
-        return self.desire < REST_DESIRE
+        return self.desire < REST_DESIRE and not self.broke
+
+    @property
+    def broke(self) -> bool:
+        return self.bank < 0.1
+
+    def refill(self, amount: float = BANK):
+        """Somebody gave the fly money again (gear menu on localhost)."""
+        self.bank = float(amount)
+        self.start = self.bank
+        self.desire = max(self.desire, 0.6)
+        self.reason = ""
+        self._event("refill", self.bank)
+        self._save()
 
     def close_slot(self, why: str):
         s = self.slots.get(self.slot)
@@ -186,7 +208,8 @@ class Drive:
 
     def snapshot(self) -> dict:
         s = self.slots.get(self.slot) or {}
-        return {"desire": round(self.desire, 3), "slot": self.slot, "name": self.name, "start": self.start,
+        return {"desire": round(self.desire, 3), "bank": round(self.bank, 2), "broke": self.broke,
+                "slot": self.slot, "name": self.name, "start": self.start,
                 "session_spins": self.session_spins, "session_net": round(self.session_net, 2),
                 "loss_streak": self.loss_streak, "win_streak": self.win_streak,
                 "target_bet": self.target_bet and round(self.target_bet, 2), "lucky": bool(s.get("lucky")),

@@ -27,8 +27,9 @@ class Control:
         self.viz = viz
         self.mode = mode
         self.paused = False
+        self.broke = False
         if viz:
-            viz.set_state(paused=False, mode=mode)
+            viz.set_state(paused=False, mode=mode, broke=False)
 
     def poll(self, block: bool = False, timeout: float = 0.0) -> str | None:
         if not self.viz:
@@ -46,8 +47,24 @@ class Control:
         elif cmd in ("casino", "browse") and cmd != self.mode:
             self.paused = False
             raise SwitchMode(cmd)
-        self.viz.set_state(paused=self.paused, mode=self.mode)
+        self.viz.set_state(paused=self.paused, mode=self.mode, broke=self.broke)
         return cmd
+
+    def wait_for_refill(self, brain, sim, env, ticks: int = 16):
+        """Broke: sit and smoke until the gear menu hands over money ('refill'); the brain keeps looking."""
+        self.broke = True
+        self.viz.set_state(paused=self.paused, mode=self.mode, broke=True)
+        print("  broke - waiting for a refill (gear menu on localhost)")
+        while True:
+            png = getattr(env, "last_png", None)
+            sim.run(ticks, encode(brain, png) if png else None, hook=self.viz.tick)
+            cmd = self.poll(block=True, timeout=0.5)
+            if cmd == "refill":
+                env.drive.refill()
+                self.broke = False
+                self.viz.set_state(paused=self.paused, mode=self.mode, broke=False)
+                print("  refilled: the fly is back in the game")
+                return
 
 
 def run_episode(brain: Brain, sim: LIF, readout: Readout, env, rng: np.random.Generator,
@@ -67,10 +84,12 @@ def run_episode(brain: Brain, sim: LIF, readout: Readout, env, rng: np.random.Ge
         ext = encode(brain, obs["png"]) + dopamine(brain, last_reward)
         counts = sim.run(ticks, ext, hook=viz.tick if viz else None)
         if control:
-            control.poll()
+            cmd = control.poll()
             while control.paused:          # shooed away: keep the brain alive on the same picture, no clicks
                 sim.run(max(8, ticks // 4), encode(brain, obs["png"]), hook=viz.tick if viz else None)
-                control.poll(block=True, timeout=0.5)
+                cmd = control.poll(block=True, timeout=0.5) or cmd
+            if cmd == "refill" and hasattr(env, "drive"):     # money handed over mid-game
+                env.drive.refill()
         mask = obs["mask"].copy()
         prior = env.action_prior() if hasattr(env, "action_prior") else None   # appetite / stake pattern
         a, p = readout.act(counts, mask, rng, prior)

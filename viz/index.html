@@ -8,57 +8,63 @@
           --acc:#ffb347; --ok:#5ee29a; --bad:#ff5c7a; --cyan:#57d6ff; --chrome:#202124; --chrome2:#35363a; }
   * { box-sizing:border-box; }
   html, body { height:100%; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.45 "Segoe UI", system-ui, sans-serif; overflow:hidden; }
-  #app { position:absolute; inset:0; display:grid; grid-template-columns: minmax(300px, 24%) 1fr minmax(320px, 26%); }
-  #left { position:relative; border-right:1px solid var(--line); overflow:hidden; }
-  #left .hdr { position:absolute; left:16px; top:14px; right:12px; pointer-events:none; }
-  #left h1 { margin:0 0 4px; font-size:15px; font-weight:600; letter-spacing:.3px; }
-  #left .sub { color:var(--dim); font-size:11.5px; }
-  #legend { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:11px; color:var(--dim); margin-top:8px; }
-  #legend i { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; vertical-align:-1px; }
-  #dragpad { position:absolute; left:0; right:0; top:0; height:62%; cursor:grab; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.45 "Segoe UI", system-ui, sans-serif; overflow:auto; }
+  #desk { position:relative; min-width:100%; min-height:100%; }
+  /* ---- floating cards: drag by the header, resize by the corner, snap to each other ---- */
+  .card { position:absolute; background:var(--panel); border:1px solid var(--line); border-radius:10px; display:flex; flex-direction:column; min-width:160px; min-height:60px; resize:both; overflow:hidden; box-shadow:0 8px 30px rgba(0,0,0,.45); z-index:2; }
+  .card.dragging { z-index:5; box-shadow:0 16px 50px rgba(0,0,0,.7), 0 0 0 1px var(--cyan); opacity:.96; }
+  .card.snap { box-shadow:0 8px 30px rgba(0,0,0,.45), 0 0 0 1px var(--acc); }
+  .card-h { display:flex; align-items:center; gap:6px; height:26px; padding:0 8px 0 10px; background:#0a0d18; border-bottom:1px solid var(--line); cursor:grab; user-select:none; font-size:10.5px; font-weight:600; letter-spacing:.7px; text-transform:uppercase; color:var(--dim); flex:none; }
+  .card-h:active { cursor:grabbing; }
+  .card-h .sp { flex:1; }
+  .card-h button { background:none; border:0; color:var(--dim); cursor:pointer; font-size:12px; padding:0 3px; line-height:1; }
+  .card-h button:hover { color:var(--fg); }
+  .card-b { flex:1; min-height:0; padding:8px 10px; overflow:auto; position:relative; }
+  .card-b.tight { padding:4px 6px; }
+  .card.glass { background:rgba(14,18,32,.55); }
+  .card.glass .card-b { overflow:visible; }
+  #hint { position:fixed; right:14px; bottom:8px; font-size:10.5px; color:#4b5470; z-index:3; pointer-events:none; }
+  #hint b { color:#6b7590; font-weight:500; }
+  #layoutbtn { position:fixed; right:14px; top:8px; z-index:6; background:#141a2c; color:var(--dim); border:1px solid var(--line); border-radius:12px; padding:2px 10px; font-size:11px; cursor:pointer; }
+
+  /* brain card */
+  #card-brain .card-b { padding:0; }
+  #dragpad { position:absolute; inset:0; cursor:grab; }
   #dragpad:active { cursor:grabbing; }
-  #left .credit { position:absolute; left:16px; bottom:10px; font-size:10.5px; color:#4b5470; pointer-events:none; }
-  #left .remote { position:absolute; left:16px; right:12px; bottom:30px; display:flex; align-items:center; gap:8px; font-size:11px; color:var(--dim); z-index:20; }
-  #left .remote button { background:#141a2c; color:var(--fg); border:1px solid var(--line); border-radius:12px; padding:2px 10px; font-size:11px; cursor:pointer; }
-  #left .remote button.on { color:var(--ok); border-color:#2b5a45; }
-  #left .remote code { font-size:10.5px; color:var(--cyan); }
-  #gear { position:fixed; z-index:30; background:#0e1220; border:1px solid var(--line); border-radius:10px; padding:8px; box-shadow:0 12px 40px rgba(0,0,0,.6); display:flex; flex-direction:column; gap:4px; min-width:190px; }
+  #brainfoot { position:absolute; left:0; right:0; bottom:0; padding:4px 10px; font-size:10.5px; color:var(--dim); background:linear-gradient(transparent, rgba(7,9,15,.85)); pointer-events:none; }
+  #brainfoot b { color:var(--fg); font-weight:500; }
+  #legend { position:absolute; left:8px; top:6px; display:flex; flex-wrap:wrap; gap:3px 9px; font-size:10px; color:var(--dim); pointer-events:none; }
+  #legend i { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:4px; vertical-align:-1px; }
+  /* fly card */
+  #card-fly .card-b { padding:0; }
+  .flylabel { position:absolute; left:0; right:0; bottom:38px; text-align:center; font-size:11px; color:var(--dim); pointer-events:none; }
+  .flylabel b { color:var(--fg); font-weight:600; }
+  .remote { position:absolute; left:10px; right:10px; bottom:8px; display:flex; align-items:center; gap:8px; font-size:11px; color:var(--dim); }
+  .remote button { background:#141a2c; color:var(--fg); border:1px solid var(--line); border-radius:12px; padding:2px 10px; font-size:11px; cursor:pointer; }
+  .remote button.on { color:var(--ok); border-color:#2b5a45; }
+  .remote code { font-size:10.5px; color:var(--cyan); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #gear { position:fixed; z-index:30; background:#0e1220; border:1px solid var(--line); border-radius:10px; padding:8px; box-shadow:0 12px 40px rgba(0,0,0,.6); display:none; flex-direction:column; gap:4px; min-width:200px; }
   #gear .gear-title { font-size:11px; color:var(--dim); letter-spacing:.6px; text-transform:uppercase; padding:2px 6px 4px; }
   #gear button { background:#141a2c; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:12.5px; text-align:left; cursor:pointer; }
   #gear button:hover { border-color:var(--cyan); }
   #gear button.on { color:var(--acc); border-color:#5a4520; }
   #gl.hit { pointer-events:auto; cursor:pointer; }
-  #casino { display:none; }
-  #drive { margin-top:6px; }
-  #drive .muted { font-size:11px; color:var(--dim); margin:4px 0; }
-  #events { font-family:Consolas, monospace; font-size:10.5px; max-height:96px; overflow:auto; margin:4px 0; }
-  #events div { padding:1px 0; color:var(--dim); }
-  #events .goal { color:var(--ok); } #events .lucky { color:#ffd93b; } #events .bust { color:var(--bad); } #events .switch { color:var(--cyan); }
-  #slots { display:grid; grid-template-columns:1fr auto auto auto; gap:1px 8px; font-size:10.5px; color:var(--dim); }
-  #slots .n { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  #slots .lucky { color:#ffd93b; } #slots .unlucky { color:var(--bad); }
-  #casino #ctiles { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:6px; }
-  #casino #ctiles div { background:#0a0d18; border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
-  #casino #ctiles b { display:block; font-size:14px; font-weight:600; }
-  #casino #ctiles span { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.5px; }
-  #left .flylabel { position:absolute; left:0; right:0; bottom:34px; text-align:center; font-size:11px; color:var(--dim); pointer-events:none; }
-  #left .flylabel b { color:var(--fg); font-weight:600; }
 
-  #center { display:flex; align-items:center; justify-content:center; padding:18px 22px; min-width:0; }
-  #browser { width:100%; max-width:1180px; background:var(--chrome); border-radius:10px; box-shadow:0 20px 60px rgba(0,0,0,.6), 0 0 0 1px #3c3f45; overflow:hidden; font-family:"Segoe UI", system-ui, sans-serif; }
+  /* browser card */
+  #card-browser .card-b { padding:0; }
+  #browser { width:100%; background:var(--chrome); font-family:"Segoe UI", system-ui, sans-serif; }
   .bar { display:flex; align-items:center; gap:8px; }
-  .bar.title { height:40px; padding:0 12px; background:var(--chrome); }
+  .bar.title { height:38px; padding:0 12px; background:var(--chrome); }
   .dots i { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:6px; }
   .dots i:nth-child(1){background:#ff5f57} .dots i:nth-child(2){background:#febc2e} .dots i:nth-child(3){background:#28c840}
-  .tab { display:flex; align-items:center; gap:8px; height:32px; margin-top:8px; padding:0 12px; background:var(--chrome2); border-radius:8px 8px 0 0; max-width:280px; color:#e8eaed; font-size:12.5px; }
+  .tab { display:flex; align-items:center; gap:8px; height:30px; margin-top:8px; padding:0 12px; background:var(--chrome2); border-radius:8px 8px 0 0; max-width:280px; color:#e8eaed; font-size:12.5px; min-width:0; }
   .tab img { width:16px; height:16px; }
   .tab span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .tab b { font-weight:400; color:#9aa0a6; margin-left:4px; }
   .plus { color:#9aa0a6; font-size:18px; margin-left:2px; }
-  .sess { margin-left:auto; font-size:11px; color:#9aa0a6; padding:3px 8px; border:1px solid #3c3f45; border-radius:12px; }
+  .sess { margin-left:auto; font-size:11px; color:#9aa0a6; padding:3px 8px; border:1px solid #3c3f45; border-radius:12px; white-space:nowrap; }
   .sess.on { color:#5ee29a; border-color:#2b5a45; }
-  .bar.nav { height:40px; padding:0 10px; background:var(--chrome2); }
+  .bar.nav { height:38px; padding:0 10px; background:var(--chrome2); }
   .btn { color:#9aa0a6; width:26px; height:26px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:15px; }
   .omni { flex:1; height:28px; background:#202124; border-radius:14px; display:flex; align-items:center; gap:8px; padding:0 12px; color:#e8eaed; font-size:12.5px; min-width:0; }
   .omni .lock { color:#9aa0a6; font-size:11px; }
@@ -68,20 +74,18 @@
   #overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
   #tip { position:absolute; display:none; padding:3px 8px; background:rgba(20,22,30,.92); color:var(--acc); border:1px solid var(--acc); border-radius:4px; font-size:11.5px; white-space:nowrap; pointer-events:none; transform:translate(-50%, -140%); }
   .bar.status { height:24px; padding:0 12px; background:var(--chrome); font-size:11px; color:#9aa0a6; justify-content:space-between; }
+  .bar.status span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-  #right { background:var(--panel); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
-  #right section { padding:10px 14px; border-bottom:1px solid var(--line); }
-  #right h2 { margin:0 0 7px; font-size:11px; font-weight:600; letter-spacing:.8px; text-transform:uppercase; color:var(--dim); }
-  #stats { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
-  #stats div { background:#0a0d18; border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
-  #stats b { display:block; font-size:15px; font-weight:600; }
-  #stats span { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.5px; }
-  .grp { display:grid; grid-template-columns:118px 1fr 38px; gap:8px; align-items:center; font-size:11px; color:var(--dim); padding:1px 0; }
+  /* stats */
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(78px, 1fr)); gap:6px; }
+  .tiles div { background:#0a0d18; border:1px solid var(--line); border-radius:6px; padding:5px 8px; min-width:0; }
+  .tiles b { display:block; font-size:15px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tiles span { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.5px; }
+  .grp { display:grid; grid-template-columns:118px 1fr 40px; gap:8px; align-items:center; font-size:11px; color:var(--dim); padding:1px 0; }
   .grp .b { height:6px; background:#141a2c; border-radius:3px; overflow:hidden; }
   .grp .b i { display:block; height:100%; width:0; transition:width .15s; }
   .grp .v { text-align:right; font-family:Consolas, monospace; }
-  canvas.wide { width:100%; display:block; border-radius:4px; background:#0a0d18; }
-  #links { flex:1; min-height:80px; overflow:auto; padding:6px 14px; }
+  canvas.wide { width:100%; height:100%; display:block; border-radius:4px; background:#0a0d18; }
   .link { display:grid; grid-template-columns:28px 1fr 42px; gap:8px; align-items:center; padding:2px 4px; border-radius:4px; font-size:11.5px; }
   .link .i { color:var(--dim); font-family:Consolas, monospace; }
   .link .t { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--fg); }
@@ -91,122 +95,70 @@
   .link.chosen { background:#2a1d0a; outline:1px solid var(--acc); }
   .link.chosen .bar i { background:var(--acc); }
   .link.chosen .t, .link.chosen .p { color:var(--acc); }
-  #log { height:120px; overflow:auto; font-family:Consolas, monospace; font-size:11px; color:var(--dim); }
+  #log { font-family:Consolas, monospace; font-size:11px; color:var(--dim); }
   #log div { padding:1px 0; }
   #log .ok { color:var(--ok); } #log .bad { color:var(--bad); } #log .act { color:var(--acc); }
+  #drive .muted { font-size:11px; color:var(--dim); margin:4px 0; }
+  #events { font-family:Consolas, monospace; font-size:10.5px; margin:4px 0; }
+  #events div { padding:1px 0; color:var(--dim); }
+  #events .goal { color:var(--ok); } #events .lucky { color:#ffd93b; } #events .bust, #events .broke { color:var(--bad); } #events .switch { color:var(--cyan); } #events .refill { color:var(--ok); }
+  #slots { display:grid; grid-template-columns:1fr auto auto auto; gap:1px 8px; font-size:10.5px; color:var(--dim); }
+  #slots .n { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #slots .lucky { color:#ffd93b; } #slots .unlucky { color:var(--bad); }
+  #dopawrap { height:110px; margin:6px 0; }
+
   #gl { position:fixed; inset:0; pointer-events:none; z-index:10; }
   #flash { position:fixed; inset:0; pointer-events:none; opacity:0; transition:opacity .25s; z-index:5; }
-  #wait { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); color:var(--dim); font-size:14px; z-index:6; background:rgba(7,9,15,.8); padding:8px 14px; border-radius:6px; }
-  @media (max-width: 1100px) {   /* narrow window / phone: stack the three columns */
-    body { overflow:auto; }
-    #app { position:static; display:grid; grid-template-columns:1fr; grid-template-rows:320px auto auto; min-height:100%; }
-    #left { height:320px; border-right:0; border-bottom:1px solid var(--line); }
-    #center { padding:12px; }
-    #right { border-left:0; border-top:1px solid var(--line); }
-    #links { max-height:260px; }
-  }
+  #wait { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); color:var(--dim); font-size:14px; z-index:6; background:rgba(7,9,15,.85); padding:8px 14px; border-radius:6px; }
 </style>
 </head>
 <body>
-<div id="app">
-  <aside id="left">
-    <div id="dragpad" title="вращать мозг"></div>
-    <div class="hdr">
-      <h1>Мозг мухи · MaleCNS</h1>
-      <div class="sub" id="hudline">загрузка нейронов…</div>
+<div id="desk">
+  <div class="card glass" id="card-brain" data-id="brain"><div class="card-h"><span>Мозг мухи · MaleCNS</span><span class="sp"></span><span id="hudline" style="font-weight:400;text-transform:none;letter-spacing:0"></span><button class="max" title="развернуть">⤢</button></div>
+    <div class="card-b"><div id="dragpad" title="вращать мозг"></div>
       <div id="legend">
-        <span><i style="background:#4d8dff"></i>зрительные доли</span>
-        <span><i style="background:#b57bff"></i>центральный мозг</span>
-        <span><i style="background:#4de08a"></i>VNC</span>
-        <span><i style="background:#ffb347"></i>нисходящие</span>
-        <span><i style="background:#ff5c5c"></i>моторные</span>
-        <span><i style="background:#57f0ff"></i>сетчатка</span>
-        <span><i style="background:#ff4dd2"></i>PPL101 (−)</span>
-        <span><i style="background:#ffd93b"></i>PAM (+)</span>
+        <span><i style="background:#4d8dff"></i>зрительные</span><span><i style="background:#b57bff"></i>центр</span><span><i style="background:#4de08a"></i>VNC</span>
+        <span><i style="background:#ffb347"></i>DN</span><span><i style="background:#ff5c5c"></i>моторные</span><span><i style="background:#57f0ff"></i>сетчатка</span>
+        <span><i style="background:#ff4dd2"></i>PPL101 −</span><span><i style="background:#ffd93b"></i>PAM +</span>
       </div>
-    </div>
-    <div class="flylabel" id="flylabel"><b>Drosophila</b> · парит</div>
-    <div class="remote" id="remote" style="display:none">
-      <span>туннель для коллег</span>
-      <button id="tunbtn">выкл</button>
-      <code id="tunurl"></code>
-    </div>
-    <div id="gear" style="display:none">
-      <div class="gear-title">⚙ муха</div>
-      <button id="g-anim">Остановить полёт</button>
-      <button id="g-pause">Прогнать</button>
-      <button id="g-mode">Крутить слоты</button>
-    </div>
-    <div class="credit">модель: NeuroMechFly v2 (EPFL, Apache-2.0) · перетаскивание — вращать мозг</div>
-  </aside>
+      <div id="brainfoot">загрузка нейронов…</div>
+    </div></div>
+  <div class="card glass" id="card-fly" data-id="fly"><div class="card-h"><span>Drosophila</span><span class="sp"></span><span style="font-weight:400;text-transform:none;letter-spacing:0">клик по мухе — меню</span></div>
+    <div class="card-b">
+      <div class="flylabel" id="flylabel"><b>Drosophila</b> · парит</div>
+      <div class="remote" id="remote" style="display:none"><span>туннель</span><button id="tunbtn">выкл</button><code id="tunurl"></code></div>
+    </div></div>
 
-  <main id="center">
-    <div id="browser">
-      <div class="bar title">
-        <span class="dots"><i></i><i></i><i></i></span>
-        <div class="tab"><img id="fav" alt=""><span id="tabtitle">Новая вкладка</span><b>×</b></div>
-        <span class="plus">+</span>
-        <span class="sess" id="sess">гость</span>
-      </div>
-      <div class="bar nav">
-        <span class="btn">←</span><span class="btn">→</span><span class="btn">⟳</span>
-        <div class="omni"><span class="lock">🔒</span><span id="url">about:blank</span></div>
-        <span class="btn">⋮</span>
-      </div>
-      <div id="viewport">
-        <img id="shot" alt="">
-        <canvas id="overlay"></canvas>
-        <div id="tip"></div>
-      </div>
+  <div class="card" id="card-browser" data-id="browser"><div class="card-h"><span>Браузер мухи</span><span class="sp"></span><button class="max" title="развернуть">⤢</button></div>
+    <div class="card-b"><div id="browser">
+      <div class="bar title"><span class="dots"><i></i><i></i><i></i></span><div class="tab"><img id="fav" alt=""><span id="tabtitle">Новая вкладка</span><b>×</b></div><span class="plus">+</span><span class="sess" id="sess">гость</span></div>
+      <div class="bar nav"><span class="btn">←</span><span class="btn">→</span><span class="btn">⟳</span><div class="omni"><span class="lock">🔒</span><span id="url">about:blank</span></div><span class="btn">⋮</span></div>
+      <div id="viewport"><img id="shot" alt=""><canvas id="overlay"></canvas><div id="tip"></div></div>
       <div class="bar status"><span id="status">ожидание симуляции…</span><span id="inline"></span></div>
-    </div>
-  </main>
+    </div></div></div>
 
-  <aside id="right">
-    <section>
-      <h2>Состояние</h2>
-      <div id="stats">
-        <div><b id="s-ep">0</b><span>эпизод</span></div>
-        <div><b id="s-step">0</b><span>шаг</span></div>
-        <div><b id="s-rate">—</b><span>активность</span></div>
-        <div><b id="s-ret">0</b><span>награда</span></div>
-      </div>
-    </section>
-    <section id="casino">
-      <h2>Демо-счёт · дофамин</h2>
-      <div id="ctiles">
-        <div><b id="c-bal">—</b><span>баланс FUN</span></div>
-        <div><b id="c-bet">—</b><span>ставка</span></div>
-        <div><b id="c-win">—</b><span>выигрыш</span></div>
-      </div>
-      <canvas id="dopa" class="wide" height="90"></canvas>
+  <div class="card" id="card-state" data-id="state"><div class="card-h"><span>Состояние</span><span class="sp"></span><button class="max">⤢</button></div>
+    <div class="card-b"><div class="tiles"><div><b id="s-ep">0</b><span>эпизод</span></div><div><b id="s-step">0</b><span>шаг</span></div><div><b id="s-rate">—</b><span>активность</span></div><div><b id="s-ret">0</b><span>награда</span></div></div></div></div>
+  <div class="card" id="card-casino" data-id="casino"><div class="card-h"><span>Банк мухи · азарт</span><span class="sp"></span><button class="max">⤢</button></div>
+    <div class="card-b">
+      <div class="tiles"><div><b id="c-bal">—</b><span>банк FUN</span></div><div><b id="c-bet">—</b><span>ставка</span></div><div><b id="c-win">—</b><span>выигрыш</span></div><div><b id="c-demo">—</b><span>демо-счёт</span></div></div>
+      <div id="dopawrap"><canvas id="dopa" class="wide"></canvas></div>
       <div id="drive">
         <div class="grp"><span>азарт</span><div class="b"><i id="desire-bar" style="background:linear-gradient(90deg,#ff5c7a,#ffd93b,#5ee29a)"></i></div><span class="v" id="desire-v">—</span></div>
-        <div id="slotline" class="muted"></div>
+        <div id="slotline" class="muted">ждёт казино…</div>
         <div id="events"></div>
         <div id="slots"></div>
       </div>
-    </section>
-    <section>
-      <h2>Активность по отделам мозга</h2>
-      <div id="groups"></div>
-    </section>
-    <section>
-      <h2>Спайки readout: 512 нисходящих + 512 моторных</h2>
-      <canvas id="raster" class="wide" height="150"></canvas>
-    </section>
-    <section>
-      <h2>Доля активных нейронов · награды</h2>
-      <canvas id="trace" class="wide" height="56"></canvas>
-    </section>
-    <section style="padding-bottom:2px"><h2>Решение — softmax по ссылкам</h2></section>
-    <div id="links"></div>
-    <section>
-      <h2>Журнал</h2>
-      <div id="log"></div>
-    </section>
-  </aside>
+    </div></div>
+  <div class="card" id="card-groups" data-id="groups"><div class="card-h"><span>Активность по отделам мозга</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b"><div id="groups"></div></div></div>
+  <div class="card" id="card-raster" data-id="raster"><div class="card-h"><span>Спайки readout: 512 DN + 512 моторных</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b tight"><canvas id="raster" class="wide"></canvas></div></div>
+  <div class="card" id="card-trace" data-id="trace"><div class="card-h"><span>Доля активных нейронов · награды</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b tight"><canvas id="trace" class="wide"></canvas></div></div>
+  <div class="card" id="card-links" data-id="links"><div class="card-h"><span>Решение — softmax</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b" id="links"></div></div>
+  <div class="card" id="card-log" data-id="log"><div class="card-h"><span>Журнал</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b" id="log"></div></div>
 </div>
+<button id="layoutbtn" title="вернуть карточки на места">↺ раскладка</button>
+<div id="hint"><b>карточки</b> двигаются за заголовок, тянутся за правый нижний угол, прилипают друг к другу · ⤢ развернуть</div>
+<div id="gear"><div class="gear-title">⚙ муха</div><button id="g-anim">Остановить полёт</button><button id="g-pause">Прогнать</button><button id="g-mode">Крутить слоты</button><button id="g-refill" style="display:none">Дать 50 000 FUN</button></div>
 <div id="flash"></div>
 <div id="wait">ожидание симуляции…</div>
 <canvas id="gl"></canvas>
@@ -216,10 +168,80 @@
 <script>
 const $ = id => document.getElementById(id);
 const PX_W = 1280, PX_H = 800;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-// ------------------------------------------------------------------ 3-D overlay in *pixel* units
-// World units == CSS pixels on the z=0 plane, origin at the window centre, y up. Anything on z=0
-// lines up exactly with the DOM underneath, so the fly can land on real link boxes.
+// ================================================================== cards: drag / snap / resize / persist
+const LKEY = 'fly.layout.v2', GAP = 8, SNAP = 12;
+const cards = [...document.querySelectorAll('.card')];
+function defaultLayout() {
+  const W = innerWidth, H = innerHeight, L = {};
+  const lw = Math.round(clamp(W * 0.24, 280, 420)), rw = Math.round(clamp(W * 0.25, 300, 460));
+  const bh = Math.round(H * 0.44);
+  L.brain = { x: 16, y: 16, w: lw, h: bh };
+  L.fly = { x: 16, y: 16 + bh + GAP, w: lw, h: H - 32 - bh - GAP };
+  const cx = 16 + lw + GAP, cw = W - cx - rw - GAP - 16;
+  L.browser = { x: cx, y: 16, w: cw, h: 0 };
+  const rx = W - rw - 16, want = [['state', 96], ['casino', 340], ['groups', 210], ['raster', 170], ['trace', 100], ['links', 230], ['log', 170]];
+  const total = want.reduce((a, [, h]) => a + h, 0), f = Math.min(1, (H - 32 - GAP * (want.length - 1)) / total);   // fit the column into the window
+  let y = 16;
+  for (const [id, h] of want) { const hh = Math.max(64, Math.round(h * f)); L[id] = { x: rx, y, w: rw, h: hh }; y += hh + GAP; }
+  return L;
+}
+let layoutState = null;
+try { layoutState = JSON.parse(localStorage.getItem(LKEY) || 'null'); } catch (e) {}
+function applyLayout(L) {
+  for (const c of cards) {
+    const r = L[c.dataset.id]; if (!r) continue;
+    c.style.left = r.x + 'px'; c.style.top = r.y + 'px'; c.style.width = r.w + 'px';
+    c.style.height = r.h ? r.h + 'px' : '';
+  }
+  onLayoutChanged(false);
+}
+let manualLayout = !!layoutState;
+function saveLayout() {   // only a layout the user touched is remembered; otherwise defaults follow the window size
+  manualLayout = true;
+  const L = {};
+  for (const c of cards) L[c.dataset.id] = { x: c.offsetLeft, y: c.offsetTop, w: c.offsetWidth, h: c.dataset.id === 'browser' ? 0 : c.offsetHeight };
+  try { localStorage.setItem(LKEY, JSON.stringify(L)); } catch (e) {}
+}
+$('layoutbtn').onclick = () => { try { localStorage.removeItem(LKEY); } catch (e) {} manualLayout = false; for (const c of cards) delete c.dataset.saved; applyLayout(defaultLayout()); };
+function rectOf(c) { return { l: c.offsetLeft, t: c.offsetTop, r: c.offsetLeft + c.offsetWidth, b: c.offsetTop + c.offsetHeight }; }
+function snapTo(me, x, y) {   // magnetic edges: other cards (with a gap) and the window (16 px margin)
+  const w = me.offsetWidth, h = me.offsetHeight, edgesX = [16, innerWidth - 16 - w], edgesY = [16, innerHeight - 16 - h];
+  for (const o of cards) { if (o === me) continue; const r = rectOf(o);
+    edgesX.push(r.r + GAP, r.l - GAP - w, r.l, r.r - w); edgesY.push(r.b + GAP, r.t - GAP - h, r.t, r.b - h); }
+  let sx = x, sy = y, hit = false;
+  for (const e of edgesX) if (Math.abs(x - e) < SNAP) { sx = e; hit = true; break; }
+  for (const e of edgesY) if (Math.abs(y - e) < SNAP) { sy = e; hit = true; break; }
+  return [Math.max(0, sx), Math.max(0, sy), hit];
+}
+for (const c of cards) {
+  const h = c.querySelector('.card-h');
+  h.addEventListener('pointerdown', e => {
+    if (e.target.tagName === 'BUTTON') return;
+    const ox = e.clientX - c.offsetLeft, oy = e.clientY - c.offsetTop;
+    c.classList.add('dragging'); h.setPointerCapture(e.pointerId);
+    const move = ev => { const [x, y, hit] = snapTo(c, ev.clientX - ox, ev.clientY - oy); c.style.left = x + 'px'; c.style.top = y + 'px'; c.classList.toggle('snap', hit); onLayoutChanged(false); };
+    const up = () => { c.classList.remove('dragging', 'snap'); h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); saveLayout(); };
+    onLayoutChanged(false);
+    h.addEventListener('pointermove', move); h.addEventListener('pointerup', up);
+  });
+  const mx = c.querySelector('.max');
+  if (mx) mx.onclick = () => {
+    if (c.dataset.saved) { const r = JSON.parse(c.dataset.saved); delete c.dataset.saved; c.style.left = r.x + 'px'; c.style.top = r.y + 'px'; c.style.width = r.w + 'px'; c.style.height = r.h ? r.h + 'px' : ''; c.style.zIndex = ''; mx.textContent = '⤢'; }
+    else { c.dataset.saved = JSON.stringify({ x: c.offsetLeft, y: c.offsetTop, w: c.offsetWidth, h: c.dataset.id === 'browser' ? 0 : c.offsetHeight });
+      c.style.left = Math.round(innerWidth * 0.18) + 'px'; c.style.top = '40px'; c.style.width = Math.round(innerWidth * 0.64) + 'px'; if (c.dataset.id !== 'browser') c.style.height = Math.round(innerHeight * 0.8) + 'px'; mx.textContent = '⤡'; c.style.zIndex = 4; }
+    onLayoutChanged(); saveLayout();
+  };
+  new ResizeObserver(() => onLayoutChanged(false)).observe(c);
+  c.addEventListener('pointerup', e => { if (e.target.closest('.card-h')) return; const r = c.dataset.size; const now = c.offsetWidth + 'x' + c.offsetHeight; if (r && r !== now) saveLayout(); c.dataset.size = now; });
+  c.addEventListener('pointerdown', () => { c.dataset.size = c.offsetWidth + 'x' + c.offsetHeight; });
+}
+let layoutTimer = 0;
+function onLayoutChanged(save = true) { if (window.layout) { layout(); fitOverlay(); } clearTimeout(layoutTimer); layoutTimer = setTimeout(() => { if (save) saveLayout(); redrawCharts(); }, 150); }
+
+// ================================================================== 3-D overlay in *pixel* units
+// World units == CSS pixels on the z=0 plane, origin at the viewport centre, y up: the fly lands on real DOM boxes.
 const glCanvas = $('gl');
 const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, alpha: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -236,37 +258,42 @@ function resize() {
   camera.aspect = W / H; camera.updateProjectionMatrix();
   camera.position.set(0, 0, (H / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   camera.lookAt(0, 0, 0);
-  layout();
+  layout(); fitOverlay();
 }
-const s2w = (sx, sy, z = 0) => new THREE.Vector3(sx - W / 2, H / 2 - sy, z);
+const toWorld = (sx, sy, z = 0) => new THREE.Vector3(sx - W / 2, H / 2 - sy, z);   // viewport px -> world
 
-// ------------------------------------------------------------------ brain point cloud (left column, top)
+// ================================================================== brain point cloud (framed in its card)
 const GROUP_COL = [[0.55, 0.58, 0.7], [0.30, 0.55, 1.0], [0.71, 0.48, 1.0], [0.30, 0.88, 0.54], [1.0, 0.70, 0.28], [1.0, 0.36, 0.36], [0.34, 0.94, 1.0], [1.0, 0.30, 0.82], [1.0, 0.85, 0.23]];
 const GROUP_NAME = ['прочие', 'зрительные доли', 'центральный мозг', 'VNC', 'нисходящие', 'моторные', 'сетчатка', 'дофамин PPL101 (−)', 'дофамин PAM (+)'];
 const GROUP_CSS = ['#8c93b3', '#4d8dff', '#b57bff', '#4de08a', '#ffb347', '#ff5c5c', '#57f0ff', '#ff4dd2', '#ffd93b'];
 const brainGroup = new THREE.Group(); scene.add(brainGroup);
-let N = 0, base = null, colors = null, actNow = null, actTarget = null, actBytes = null, groupArr = null, points = null, dopaFlash = 0, pamFlash = 0;
-let readoutPos = [], nDescending = 512, groupIdx = [];
+let N = 0, base = null, colors = null, actNow = null, actTarget = null, actBytes = null, actSlow = null, groupArr = null, points = null, hot = null, hotIdx = null, posArr = null, dopaFlash = 0, pamFlash = 0;
+let readoutPos = [], nDescending = 512, groupIdx = [], groupMean = [];
+const HOT = 1500;   // the most persistently active neurons get their own bright, bigger layer
 const spin = { x: 0.15, y: 0, drag: null, idle: 0 };
 async function loadBrain() {
   const meta = await (await fetch('/meta.json')).json();
-  const raw = new Float32Array(await (await fetch('/soma.bin?v=' + meta.n + '_' + meta.total)).arrayBuffer());   // cached a day per brain
+  const raw = new Float32Array(await (await fetch('/soma.bin?v=' + meta.n + '_' + meta.total)).arrayBuffer());
   N = meta.n; groupArr = Uint8Array.from(atob(meta.group), c => c.charCodeAt(0));
   readoutPos = meta.readout; nDescending = meta.n_descending;
-  const pos = new Float32Array(N * 3);
-  for (let i = 0; i < N; i++) {   // dataset: x lateral, y dorso-ventral, z antero-posterior -> brain on top, VNC below
-    pos[i * 3] = raw[i * 3]; pos[i * 3 + 1] = -raw[i * 3 + 2]; pos[i * 3 + 2] = raw[i * 3 + 1];
-  }
-  base = new Float32Array(N * 3); colors = new Float32Array(N * 3); actNow = new Float32Array(N); actTarget = new Float32Array(N); actBytes = new Uint8Array(N);
-  groupIdx = GROUP_COL.map(() => []);
+  posArr = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) { posArr[i * 3] = raw[i * 3]; posArr[i * 3 + 1] = -raw[i * 3 + 2]; posArr[i * 3 + 2] = raw[i * 3 + 1]; }
+  base = new Float32Array(N * 3); colors = new Float32Array(N * 3); actNow = new Float32Array(N); actTarget = new Float32Array(N); actBytes = new Uint8Array(N); actSlow = new Float32Array(N);
+  groupIdx = GROUP_COL.map(() => []); groupMean = GROUP_COL.map(() => 0);
   for (let i = 0; i < N; i++) { const c = GROUP_COL[groupArr[i]] || GROUP_COL[0]; base.set(c, i * 3); groupIdx[groupArr[i]].push(i); }
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   points = new THREE.Points(geo, new THREE.PointsMaterial({ size: 1.7, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }));
   brainGroup.add(points);
-  updateColors();
-  $('hudline').textContent = `${meta.total.toLocaleString('ru')} нейронов · ${meta.synapses.toLocaleString('ru')} синапсов · ${N.toLocaleString('ru')} сом на экране`;
+  const hg = new THREE.BufferGeometry();
+  hg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(HOT * 3), 3));
+  hg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(HOT * 3), 3));
+  hg.setDrawRange(0, 0);
+  hot = new THREE.Points(hg, new THREE.PointsMaterial({ size: 4.5, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
+  hotIdx = new Int32Array(HOT);
+  brainGroup.add(hot);
+  $('hudline').textContent = `${meta.total.toLocaleString('ru')} нейронов · ${meta.synapses.toLocaleString('ru')} синапсов`;
   const g = $('groups'); g.innerHTML = '';
   for (let k = 1; k < GROUP_COL.length; k++) g.insertAdjacentHTML('beforeend', `<div class="grp"><span>${GROUP_NAME[k]}</span><div class="b"><i id="gb${k}" style="background:${GROUP_CSS[k]}"></i></div><span class="v" id="gv${k}">0%</span></div>`);
   setupRemote(meta);
@@ -276,90 +303,81 @@ function updateColors() {
   const df = dopaFlash, pf = pamFlash;
   for (let i = 0; i < N; i++) {
     const a = actNow[i] += (actTarget[i] - actNow[i]) * 0.35;
-    const k = 0.16 + 0.84 * a, j = i * 3;
+    const gboost = groupMean[groupArr[i]] * 1.5;          // whole regions that work harder glow brighter
+    const k = 0.14 + 0.86 * a + gboost, j = i * 3;
     let r = base[j] * k + a * 0.45, g = base[j + 1] * k + a * 0.45, b = base[j + 2] * k + a * 0.3;
     if (df > 0 && groupArr[i] === 7) { r = 1; g = 0.2 * (1 - df); b = 0.6; }
     if (pf > 0 && groupArr[i] === 8) { r = 1; g = 0.9; b = 0.3 * (1 - pf); }
     colors[j] = r; colors[j + 1] = g; colors[j + 2] = b;
   }
-  if (points) points.geometry.attributes.color.needsUpdate = true;
+  points.geometry.attributes.color.needsUpdate = true;
 }
-// ------------------------------------------------------------------ remote viewing toggle (localhost only)
+function updateHot() {   // top-HOT neurons by slow activity -> big bright points; footer lists the hottest regions
+  let n = 0;
+  const thr = 0.35, pos = hot.geometry.attributes.position.array, col = hot.geometry.attributes.color.array;
+  for (let i = 0; i < N && n < HOT; i++) if (actSlow[i] > thr) hotIdx[n++] = i;
+  for (let m = 0; m < n; m++) { const i = hotIdx[m], j = i * 3, s = Math.min(1, actSlow[i]);
+    pos[m * 3] = posArr[j]; pos[m * 3 + 1] = posArr[j + 1]; pos[m * 3 + 2] = posArr[j + 2];
+    col[m * 3] = base[j] * 0.4 + 0.6 * s; col[m * 3 + 1] = base[j + 1] * 0.4 + 0.6 * s; col[m * 3 + 2] = base[j + 2] * 0.4 + 0.45 * s; }
+  hot.geometry.setDrawRange(0, n); hot.geometry.attributes.position.needsUpdate = true; hot.geometry.attributes.color.needsUpdate = true;
+  const top = groupMean.map((v, k) => [v, k]).filter(x => x[1] > 0).sort((a, b) => b[0] - a[0]).slice(0, 3);
+  $('brainfoot').innerHTML = `сейчас сильнее всего: ` + top.map(([v, k]) => `<b style="color:${GROUP_CSS[k]}">${GROUP_NAME[k]}</b> ${(v * 100).toFixed(1)}%`).join(' · ') + ` · ярких нейронов: <b>${n}</b>`;
+}
+const pad = $('dragpad');
+pad.addEventListener('pointerdown', e => { spin.drag = [e.clientX, e.clientY]; spin.idle = 0; pad.setPointerCapture(e.pointerId); });
+pad.addEventListener('pointerup', () => spin.drag = null);
+pad.addEventListener('pointermove', e => { if (!spin.drag) return; spin.y += (e.clientX - spin.drag[0]) * 0.008; spin.x = clamp(spin.x + (e.clientY - spin.drag[1]) * 0.008, -1.2, 1.2); spin.drag = [e.clientX, e.clientY]; spin.idle = 0; });
+
+// ================================================================== remote / tunnel / gear menu
 let isLocal = false;
 function setupRemote(meta) {
   isLocal = !!meta.local;
   if (!meta.local) return;
   const box = $('remote'), tbtn = $('tunbtn'), turl = $('tunurl');
   box.style.display = 'flex';
-  const show = (on, lan, tun) => {   // tunnel only: switching it on also opens remote access
-    tbtn.textContent = meta.tunnel_managed ? 'serve' : tun ? 'вкл' : 'выкл'; tbtn.className = tun ? 'on' : ''; turl.textContent = tun || '';
-    tbtn.disabled = !!meta.tunnel_managed; tbtn.title = meta.tunnel_managed ? 'туннелем управляет fly.serve' : '';
-  };
+  const show = (on, lan, tun) => { tbtn.textContent = meta.tunnel_managed ? 'serve' : tun ? 'вкл' : 'выкл'; tbtn.className = tun ? 'on' : ''; turl.textContent = tun || ''; tbtn.disabled = !!meta.tunnel_managed; tbtn.title = meta.tunnel_managed ? 'туннелем управляет fly.serve' : ''; };
   window.showRemote = show;
   show(meta.public, meta.lan_url, meta.tunnel_url);
-  tbtn.onclick = async () => {
-    const on = tbtn.className !== 'on'; tbtn.textContent = on ? '…' : 'выкл';
-    const r = await (await fetch('/admin/tunnel?on=' + (on ? 1 : 0))).json();
-    show(r.public, r.lan_url, r.tunnel_url);
-    log(r.error ? `туннель: ${r.error}` : r.tunnel_url ? `туннель открыт: ${r.tunnel_url}` : 'туннель закрыт', r.error ? 'bad' : '');
-  };
+  tbtn.onclick = async () => { const on = tbtn.className !== 'on'; tbtn.textContent = on ? '…' : 'выкл'; const r = await (await fetch('/admin/tunnel?on=' + (on ? 1 : 0))).json(); show(r.public, r.lan_url, r.tunnel_url); log(r.error ? `туннель: ${r.error}` : r.tunnel_url ? `туннель открыт: ${r.tunnel_url}` : 'туннель закрыт', r.error ? 'bad' : ''); };
   if (meta.state) applyState(meta.state);
 }
-
-// ------------------------------------------------------------------ click on the fly -> gear menu
-const flyCtl = { anim: 'fly', paused: false, mode: 'browse' };
+const flyCtl = { anim: 'fly', paused: false, mode: 'browse', broke: false };
 try { flyCtl.anim = localStorage.getItem('fly.anim') || 'fly'; } catch (e) {}
 function applyState(s) {
-  flyCtl.paused = !!s.paused; flyCtl.mode = s.mode || 'browse';
+  flyCtl.paused = !!s.paused; flyCtl.mode = s.mode || 'browse'; flyCtl.broke = !!s.broke;
   $('g-pause').textContent = flyCtl.paused ? 'Вернуть' : 'Прогнать'; $('g-pause').className = flyCtl.paused ? 'on' : '';
   $('g-mode').textContent = flyCtl.mode === 'casino' ? 'Гулять по сайту' : 'Крутить слоты'; $('g-mode').className = flyCtl.mode === 'casino' ? 'on' : '';
   $('g-anim').textContent = flyCtl.anim === 'walk' ? 'Возобновить полёт' : 'Остановить полёт'; $('g-anim').className = flyCtl.anim === 'walk' ? 'on' : '';
-  if (flyState.mode === 'hover' || flyState.mode === 'walk') flyState.mode = flyCtl.anim === 'walk' ? 'walk' : 'hover';
-  if (flyCtl.paused) setFlyLabel('прогнана — сидит и ждёт'); else if (flyCtl.mode === 'casino') setFlyLabel('крутит слоты (демо-счёт)');
+  $('g-refill').style.display = flyCtl.broke ? 'block' : 'none';
+  if (flyState.mode === 'hover' || flyState.mode === 'walk' || flyState.mode === 'smoke') flyState.mode = flyCtl.broke ? 'smoke' : flyCtl.anim === 'walk' ? 'walk' : 'hover';
+  if (flyCtl.broke) setFlyLabel('проигралась — курит и ждёт, пока дадут денег'); else if (flyCtl.paused) setFlyLabel('прогнана — сидит и ждёт'); else if (flyCtl.mode === 'casino') setFlyLabel('крутит слоты');
 }
 const flyScreen = new THREE.Vector3();
 function flyOnScreen() { flyScreen.copy(flyRoot.position).project(camera); return [(flyScreen.x + 1) / 2 * W, (1 - flyScreen.y) / 2 * H]; }
-addEventListener('mousemove', e => {
-  if (!isLocal || !fly.ready) return;
-  const [fx, fy] = flyOnScreen(), r = Math.min(120, flyRoot.scale.x * fly.len * 0.5);
-  glCanvas.classList.toggle('hit', Math.hypot(e.clientX - fx, e.clientY - fy) < r);
-});
-glCanvas.addEventListener('click', e => {
-  const g = $('gear'); if (g.style.display === 'flex') { g.style.display = 'none'; return; }
-  g.style.display = 'flex'; g.style.left = Math.min(W - 210, e.clientX + 12) + 'px'; g.style.top = Math.min(H - 150, e.clientY - 20) + 'px';
-});
+addEventListener('mousemove', e => { if (!isLocal || !fly.ready) return; const [fx, fy] = flyOnScreen(), r = Math.min(120, flyRoot.scale.x * fly.len * 0.5); glCanvas.classList.toggle('hit', Math.hypot(e.clientX - fx, e.clientY - fy) < r); });
+glCanvas.addEventListener('click', e => { const g = $('gear'); if (g.style.display === 'flex') { g.style.display = 'none'; return; } g.style.display = 'flex'; g.style.left = Math.min(W - 220, e.clientX + 12) + 'px'; g.style.top = Math.min(H - 190, e.clientY - 20) + 'px'; });
 addEventListener('pointerdown', e => { if (!e.target.closest('#gear') && e.target !== glCanvas) $('gear').style.display = 'none'; });
-async function cmd(do_) { const r = await (await fetch('/admin/cmd?do=' + do_)).json(); log(`команда мухе: ${do_}`, 'act'); return r; }
+async function cmd(do_) { $('gear').style.display = 'none'; const r = await (await fetch('/admin/cmd?do=' + do_)).json(); log(`команда мухе: ${do_}`, 'act'); return r; }
 $('g-anim').onclick = () => { flyCtl.anim = flyCtl.anim === 'walk' ? 'fly' : 'walk'; try { localStorage.setItem('fly.anim', flyCtl.anim); } catch (e) {} applyState(flyCtl); log(flyCtl.anim === 'walk' ? 'муха ходит пешком' : 'муха снова летает'); };
 $('g-pause').onclick = () => cmd(flyCtl.paused ? 'resume' : 'pause');
 $('g-mode').onclick = () => cmd(flyCtl.mode === 'casino' ? 'browse' : 'casino');
-const pad = $('dragpad');
-pad.addEventListener('pointerdown', e => { spin.drag = [e.clientX, e.clientY]; spin.idle = 0; pad.setPointerCapture(e.pointerId); });
-pad.addEventListener('pointerup', () => spin.drag = null);
-pad.addEventListener('pointermove', e => {
-  if (!spin.drag) return;
-  spin.y += (e.clientX - spin.drag[0]) * 0.008; spin.x = Math.max(-1.2, Math.min(1.2, spin.x + (e.clientY - spin.drag[1]) * 0.008));
-  spin.drag = [e.clientX, e.clientY]; spin.idle = 0;
-});
+$('g-refill').onclick = () => cmd('refill');
 
-// ------------------------------------------------------------------ the fly (glTF, wings split L/R for flapping)
-// NeuroMechFly v2 Drosophila (EPFL flygym, Apache-2.0): nodes thorax / body / eyes / lWing / rWing / legs,
-// head at +z, up +y. Wings are separate meshes -> hinged at the wing base for flapping.
+// ================================================================== the fly (NeuroMechFly v2, EPFL flygym, Apache-2.0)
 const flyRoot = new THREE.Group(); scene.add(flyRoot);
 const fly = { wings: [], ready: false, len: 1 };
-const envMap = (() => {   // small procedural sky/ground cubemap so chitin and wings get reflections
+const envMap = (() => {
   const faces = [];
   for (let f = 0; f < 6; f++) {
     const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
     const g = x.createLinearGradient(0, 0, 0, 64);
-    if (f === 2) { g.addColorStop(0, '#cfd8ff'); g.addColorStop(1, '#8fa3d8'); }        // +y sky
-    else if (f === 3) { g.addColorStop(0, '#2a2f45'); g.addColorStop(1, '#141826'); }   // -y ground
+    if (f === 2) { g.addColorStop(0, '#cfd8ff'); g.addColorStop(1, '#8fa3d8'); } else if (f === 3) { g.addColorStop(0, '#2a2f45'); g.addColorStop(1, '#141826'); }
     else { g.addColorStop(0, '#9fb0e6'); g.addColorStop(0.55, '#3b4463'); g.addColorStop(1, '#1a1e30'); }
     x.fillStyle = g; x.fillRect(0, 0, 64, 64); faces.push(c);
   }
   const t = new THREE.CubeTexture(faces); t.needsUpdate = true; return t;
 })();
-const MAT = {   // chitin: mostly rough with a faint sheen (not a glossy plastic toy); eyes wet and glossy
+const MAT = {
   thorax: new THREE.MeshPhysicalMaterial({ color: 0xa8683a, roughness: 0.68, metalness: 0.02, clearcoat: 0.18, clearcoatRoughness: 0.55, sheen: new THREE.Color(0x3a2a18), envMap, envMapIntensity: 0.45 }),
   body:   new THREE.MeshPhysicalMaterial({ color: 0xc08f42, roughness: 0.7, metalness: 0.02, clearcoat: 0.15, clearcoatRoughness: 0.6, sheen: new THREE.Color(0x42301a), envMap, envMapIntensity: 0.4 }),
   eyes:   new THREE.MeshPhysicalMaterial({ color: 0xc41f2c, emissive: 0x3a0507, roughness: 0.22, metalness: 0.05, clearcoat: 1.0, clearcoatRoughness: 0.1, envMap, envMapIntensity: 1.0 }),
@@ -368,365 +386,284 @@ const MAT = {   // chitin: mostly rough with a faint sheen (not a glossy plastic
   legs:   new THREE.MeshStandardMaterial({ color: 0x3f2e1f, roughness: 0.85, metalness: 0.02 }),
 };
 new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
-  const model = gltf.scene;
-  let legsMesh = null, bodyMesh = null;
-  model.traverse(o => {
-    if (!o.isMesh) return;
-    const n = o.name.toLowerCase();
+  const model = gltf.scene; let legsMesh = null, bodyMesh = null;
+  model.traverse(o => { if (!o.isMesh) return; const n = o.name.toLowerCase();
     o.material = n.includes('wing') ? MAT.wing : n.includes('eye') ? MAT.eyes : n.includes('thorax') ? MAT.thorax : n.includes('leg') ? MAT.legs : MAT.body;
-    if (n.includes('wing')) fly.wings.push({ mesh: o, s: n.startsWith('l') ? -1 : 1 });
-    if (n.includes('leg')) legsMesh = o;
-    if (n === 'body') bodyMesh = o;
-  });
+    if (n.includes('wing')) fly.wings.push({ mesh: o, s: n.startsWith('l') ? -1 : 1 }); if (n.includes('leg')) legsMesh = o; if (n === 'body') bodyMesh = o; });
   model.updateMatrixWorld(true);
   const thorax = model.getObjectByName('thorax'), tc = new THREE.Vector3();
   if (thorax) new THREE.Box3().setFromObject(thorax).getCenter(tc);
-  // wings: hinge at the base + two faint ghost copies at other phases = motion blur of a 200 Hz wingbeat
   fly.wings = fly.wings.map(({ mesh, s }) => {
     const bb = new THREE.Box3().setFromObject(mesh);
-    const hinge = new THREE.Vector3(s < 0 ? bb.max.x : bb.min.x, bb.max.y, bb.max.z);
-    hinge.x = tc.x + s * 0.12; hinge.y = Math.min(hinge.y, tc.y + 0.25);
+    const hinge = new THREE.Vector3(s < 0 ? bb.max.x : bb.min.x, bb.max.y, bb.max.z); hinge.x = tc.x + s * 0.12; hinge.y = Math.min(hinge.y, tc.y + 0.25);
     const pivot = new THREE.Group(); pivot.position.copy(hinge); model.add(pivot); pivot.attach(mesh);
     const ghosts = [-1.1, 1.1].map(ph => { const g = new THREE.Group(); g.position.copy(hinge); model.add(g); const m = new THREE.Mesh(mesh.geometry, MAT.wingGhost); m.position.copy(mesh.position); m.quaternion.copy(mesh.quaternion); m.scale.copy(mesh.scale); m.visible = false; g.add(m); return { pivot: g, ph, mesh: m }; });
     return { pivot, s, mesh, ghosts };
   });
-  // legs: hinge at the thorax so they tuck back in flight and scurry when walking
   if (legsMesh) { const lp = new THREE.Group(); lp.position.copy(tc); model.add(lp); lp.attach(legsMesh); fly.legs = lp; }
   fly.body = bodyMesh;
-  const box = new THREE.Box3().setFromObject(model), c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
-  model.position.sub(c);
+  // the cigarette: a thin white stick with an ember, held at the head; shown only when broke
+  const eyes = model.getObjectByName('eyes'), hc = new THREE.Vector3();
+  if (eyes) new THREE.Box3().setFromObject(eyes).getCenter(hc); else hc.copy(tc).add(new THREE.Vector3(0, 0.3, 1));
+  const cig = new THREE.Group();
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.7, 10), new THREE.MeshStandardMaterial({ color: 0xf4f1ea, roughness: 0.8 }));
+  stick.rotation.x = Math.PI / 2; stick.position.z = 0.35; cig.add(stick);
+  const filt = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.18, 10), new THREE.MeshStandardMaterial({ color: 0xd9a25a, roughness: 0.9 })); filt.rotation.x = Math.PI / 2; filt.position.z = 0.09; cig.add(filt);
+  const ember = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff6a00 })); ember.position.z = 0.72; cig.add(ember);
+  const glow = new THREE.PointLight(0xff5a00, 0.0, 60); glow.position.z = 0.75; cig.add(glow);
+  cig.position.copy(hc).add(new THREE.Vector3(0.12, -0.12, 0.1)); cig.rotation.x = 0.35; cig.visible = false; model.add(cig);
+  fly.cig = { group: cig, ember, glow, tip: new THREE.Vector3() };
+  const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+  model.position.sub(tc);                    // origin = thorax, so the body sits exactly on the landing point
   fly.len = Math.max(size.x, size.y, size.z); fly.model = model; flyRoot.add(model); fly.ready = true;
   layout();
-}, undefined, err => { console.warn('drosophila.glb failed, using placeholder', err); const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), MAT.body); m.scale.set(1, 0.8, 1.6); flyRoot.add(m); fly.len = 3.2; fly.ready = true; layout(); });
+}, undefined, err => { console.warn('drosophila.glb failed', err); const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), MAT.body); m.scale.set(1, 0.8, 1.6); flyRoot.add(m); fly.len = 3.2; fly.ready = true; layout(); });
 
-// Flight is a damped spring towards a target (with a way-point above the midpoint for an arc) plus low
-// noise, so every trip is a slightly different curve; the body banks and pitches with its velocity.
-const flyState = { mode: 'hover', pos: new THREE.Vector3(), home: new THREE.Vector3(), vel: new THREE.Vector3(), target: new THREE.Vector3(),
+// smoke: a small pool of soft sprites rising from the ember
+const smokeTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'); const g = x.createRadialGradient(32, 32, 2, 32, 32, 30); g.addColorStop(0, 'rgba(230,235,245,0.9)'); g.addColorStop(0.5, 'rgba(210,218,235,0.35)'); g.addColorStop(1, 'rgba(200,210,230,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+const SMOKE = 60, smoke = { pos: new Float32Array(SMOKE * 3).fill(-99999), age: new Float32Array(SMOKE).fill(9), vel: [], next: 0, last: 0 };
+for (let i = 0; i < SMOKE; i++) smoke.vel.push(new THREE.Vector3());
+const smokeGeo = new THREE.BufferGeometry(); smokeGeo.setAttribute('position', new THREE.BufferAttribute(smoke.pos, 3));
+const smokePts = new THREE.Points(smokeGeo, new THREE.PointsMaterial({ size: 26, map: smokeTex, transparent: true, opacity: 0.55, depthWrite: false, sizeAttenuation: false, color: 0xdde4f0 })); smokePts.visible = false; scene.add(smokePts);
+
+const flyState = { mode: 'hover', pos: new THREE.Vector3(), home: new THREE.Vector3(), floor: 0, vel: new THREE.Vector3(), target: new THREE.Vector3(), targetBox: null,
                    waypoint: null, after: 'hover', walk: false, landedAt: 0, heading: new THREE.Vector3(0, 0, 1), phase: 0 };
-const landedQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI)
-  .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));   // back to the camera, head up the page
-const noise = (t, a, b) => Math.sin(t * a) * 0.6 + Math.sin(t * b + 1.7) * 0.4;   // cheap smooth noise in [-1, 1]
-function flyTo(target, after, dur) {
+const landedQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));
+const noise = (t, a, b) => Math.sin(t * a) * 0.6 + Math.sin(t * b + 1.7) * 0.4;
+function flyTo(target, after, box) {
   const fs = flyState, walking = flyCtl.anim === 'walk';
-  fs.target.copy(target); fs.mode = 'fly'; fs.walk = walking; fs.after = (after === 'hover' && walking) ? 'walk' : after;
+  fs.target.copy(target); fs.targetBox = box || null; fs.mode = 'fly'; fs.walk = walking; fs.after = (after === 'hover' && walking) ? 'walk' : after;
   const d = target.clone().sub(fs.pos);
   fs.waypoint = (!walking && d.length() > 250) ? fs.pos.clone().addScaledVector(d, 0.45).add(new THREE.Vector3(0, 60 + d.length() * 0.18, 90)) : null;
 }
-function takeOff() { if (flyState.mode === 'landed') flyTo(flyState.home.clone(), 'hover', 1.0); }
+function takeOff() { if (flyState.mode === 'landed') flyTo(flyState.home.clone(), flyCtl.broke ? 'smoke' : 'hover', null); }
 
-// ------------------------------------------------------------------ layout: pin brain + fly home to the left column
+// layout: brain pinned to its card, fly home to its card (viewport coordinates)
 function layout() {
-  const r = $('left').getBoundingClientRect();
-  const cx = r.left + r.width / 2;
-  const S = Math.min(r.height * 0.27, r.width * 0.5);
-  brainGroup.position.copy(s2w(cx, r.top + r.height * 0.42)); brainGroup.scale.setScalar(S);
-  flyState.home.copy(s2w(cx, r.top + r.height * 0.82));
-  if (fly.ready) flyRoot.scale.setScalar(Math.min(r.width * 0.45, 190) / fly.len);
-  if (flyState.mode === 'hover' || flyState.mode === 'walk') flyState.pos.copy(flyState.home);
-  fitOverlay();
+  const b = $('card-brain').getBoundingClientRect(), f = $('card-fly').getBoundingClientRect();
+  const S = Math.min((b.height - 40) * 0.36, b.width * 0.42);
+  brainGroup.position.copy(toWorld(b.left + b.width / 2, b.top + 26 + (b.height - 26) * 0.5)); brainGroup.scale.setScalar(Math.max(20, S));
+  flyState.home.copy(toWorld(f.left + f.width / 2, f.top + f.height * 0.5));
+  flyState.floor = flyState.home.y - f.height * 0.18;
+  if (fly.ready) { fly.baseScale = Math.min(f.width * 0.42, 190) / fly.len; flyRoot.scale.setScalar(fly.baseScale); }
+  if (flyState.mode === 'hover' || flyState.mode === 'walk' || flyState.mode === 'smoke') flyState.pos.copy(flyState.home);
 }
-addEventListener('resize', resize);
-addEventListener('scroll', layout, { passive: true });   // stacked (narrow) layout scrolls the page
+addEventListener('resize', () => { if (!manualLayout) applyLayout(defaultLayout()); resize(); });
+addEventListener('scroll', () => { layout(); fitOverlay(); }, { passive: true });
 
-// ------------------------------------------------------------------ browser window (DOM) + overlay
+// ================================================================== browser card + overlay
 const overlay = $('overlay'), octx = overlay.getContext('2d');
-let links = [], chosen = -1, ripple = null, k = 1;   // k = overlay px per page px
+let links = [], chosen = -1, ripple = null, k = 1;
 function fitOverlay() {
   const r = overlay.getBoundingClientRect(); if (!r.width) return;
   const dpr = Math.min(devicePixelRatio, 2);
-  overlay.width = Math.round(r.width * dpr); overlay.height = Math.round(r.height * dpr);
+  if (overlay.width !== Math.round(r.width * dpr)) { overlay.width = Math.round(r.width * dpr); overlay.height = Math.round(r.height * dpr); }
   octx.setTransform(dpr, 0, 0, dpr, 0, 0); k = r.width / PX_W; drawOverlay();
 }
-function boxCenter(box) {   // hidden links (menus, zero-size) -> the top menu bar
-  const [x, y, w, h] = box;
-  if (w <= 0 || h <= 0) return [PX_W / 2, 36];
-  return [Math.max(8, Math.min(PX_W - 8, x + w / 2)), Math.max(8, Math.min(PX_H - 8, y + h / 2))];
-}
+function boxCenter(box) { const [x, y, w, h] = box; if (w <= 0 || h <= 0) return [PX_W / 2, 36]; return [clamp(x + w / 2, 8, PX_W - 8), clamp(y + h / 2, 8, PX_H - 8)]; }
 function drawOverlay() {
   octx.clearRect(0, 0, overlay.width, overlay.height);
-  links.forEach((l, i) => {
-    const [x, y, w, h] = l.box; if (w <= 0 || h <= 0) return;
-    octx.strokeStyle = i === chosen ? '#ffb347' : 'rgba(87,214,255,0.6)'; octx.lineWidth = i === chosen ? 3 : 1.2;
-    octx.strokeRect((x - 2) * k, (y - 2) * k, (w + 4) * k, (h + 4) * k);
-    if (i === chosen) { octx.fillStyle = 'rgba(255,179,71,0.18)'; octx.fillRect(x * k, y * k, w * k, h * k); }
-  });
-  if (ripple) {
-    const t = (performance.now() - ripple.t0) / 900;
-    if (t < 1) for (let j = 0; j < 2; j++) {
-      const tt = Math.max(0, t - j * 0.25);
-      octx.beginPath(); octx.arc(ripple.x * k, ripple.y * k, (10 + tt * 120) * k, 0, Math.PI * 2);
-      octx.strokeStyle = `rgba(255,179,71,${(1 - tt) * 0.9})`; octx.lineWidth = (5 * (1 - tt) + 1) * k; octx.stroke();
-    } else ripple = null;
-  }
+  links.forEach((l, i) => { const [x, y, w, h] = l.box; if (w <= 0 || h <= 0) return;
+    octx.strokeStyle = i === chosen ? '#ffb347' : 'rgba(87,214,255,0.6)'; octx.lineWidth = i === chosen ? 3 : 1.2; octx.strokeRect((x - 2) * k, (y - 2) * k, (w + 4) * k, (h + 4) * k);
+    if (i === chosen) { octx.fillStyle = 'rgba(255,179,71,0.18)'; octx.fillRect(x * k, y * k, w * k, h * k); } });
+  if (ripple) { const t = (performance.now() - ripple.t0) / 900;
+    if (t < 1) for (let j = 0; j < 2; j++) { const tt = Math.max(0, t - j * 0.25); octx.beginPath(); octx.arc(ripple.x * k, ripple.y * k, (10 + tt * 120) * k, 0, Math.PI * 2); octx.strokeStyle = `rgba(255,179,71,${(1 - tt) * 0.9})`; octx.lineWidth = (5 * (1 - tt) + 1) * k; octx.stroke(); }
+    else ripple = null; }
 }
-function linkScreen(box) {   // page px -> window px
-  const r = overlay.getBoundingClientRect(), [cx, cy] = boxCenter(box);
-  return [r.left + cx * k, r.top + cy * k];
-}
-function showTip(i) {
-  const tip = $('tip'); if (i < 0 || !links[i]) { tip.style.display = 'none'; return; }
-  const [cx, cy] = boxCenter(links[i].box);
-  tip.textContent = (links[i].text || links[i].url.replace(/^https?:\/\/[^/]+/, '')) + '  ← клик'; tip.style.left = cx * k + 'px'; tip.style.top = cy * k + 'px'; tip.style.display = 'block';
-}
+function linkScreen(box) { const r = overlay.getBoundingClientRect(), [cx, cy] = boxCenter(box); return [r.left + cx * k, r.top + cy * k]; }   // viewport px
+function showTip(i) { const tip = $('tip'); if (i < 0 || !links[i]) { tip.style.display = 'none'; return; } const [cx, cy] = boxCenter(links[i].box); tip.textContent = (links[i].text || links[i].url.replace(/^https?:\/\/[^/]+/, '')) + '  ← клик'; tip.style.left = cx * k + 'px'; tip.style.top = cy * k + 'px'; tip.style.display = 'block'; }
 
-// ------------------------------------------------------------------ right panel: brain activity
-const rateHist = [], rewardMarks = [];
-function log(msg, cls = '') { const d = document.createElement('div'); d.className = cls; d.textContent = msg; const l = $('log'); l.prepend(d); while (l.children.length > 60) l.lastChild.remove(); }
+// ================================================================== stats cards
+const rateHist = [], rewardMarks = [], dopa = [];
+function log(msg, cls = '') { const d = document.createElement('div'); d.className = cls; d.textContent = msg; const l = $('log'); l.prepend(d); while (l.children.length > 80) l.lastChild.remove(); }
+function sizeCanvas(c) { const w = c.clientWidth, h = c.clientHeight; if (!w || !h) return false; if (c.width !== w || c.height !== h) { c.width = w; c.height = h; return true; } return false; }
 function drawTrace() {
-  const c = $('trace'); if (c.width !== c.clientWidth) c.width = c.clientWidth;
-  const ctx = c.getContext('2d'), Wc = c.width, Hc = c.height;
-  ctx.clearRect(0, 0, Wc, Hc);
-  const n = rateHist.length; if (!n) return;
+  const c = $('trace'); sizeCanvas(c); const ctx = c.getContext('2d'), Wc = c.width, Hc = c.height;
+  ctx.clearRect(0, 0, Wc, Hc); const n = rateHist.length; if (!n) return;
   const max = Math.max(0.05, ...rateHist);
-  ctx.beginPath();
-  rateHist.forEach((v, i) => { const x = i / Math.max(1, n - 1) * Wc, y = Hc - 3 - (v / max) * (Hc - 8); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  ctx.beginPath(); rateHist.forEach((v, i) => { const x = i / Math.max(1, n - 1) * Wc, y = Hc - 3 - (v / max) * (Hc - 8); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
   ctx.strokeStyle = '#57d6ff'; ctx.lineWidth = 1.5; ctx.stroke();
   rewardMarks.forEach(m => { const x = m.i / Math.max(1, n - 1) * Wc; ctx.fillStyle = m.r > 0 ? '#5ee29a' : '#ff5c7a'; ctx.fillRect(x - 1, 2, 2, Hc - 4); });
   ctx.fillStyle = '#7b85a6'; ctx.font = '10px Consolas'; ctx.fillText(max.toFixed(2), Wc - 30, 11);
 }
 function drawRaster(a) {
-  const c = $('raster'); if (c.width !== c.clientWidth) { c.width = c.clientWidth; const ctx = c.getContext('2d'); ctx.fillStyle = '#0a0d18'; ctx.fillRect(0, 0, c.width, c.height); }
-  const ctx = c.getContext('2d'), Wc = c.width, Hc = c.height, col = 2;
-  ctx.drawImage(c, col, 0, Wc - col, Hc, 0, 0, Wc - col, Hc);
-  ctx.fillStyle = '#0a0d18'; ctx.fillRect(Wc - col, 0, col, Hc);
-  const n = readoutPos.length, rows = Hc, per = n / rows;
-  for (let r = 0; r < rows; r++) {
-    let v = 0; const lo = Math.floor(r * per), hi = Math.floor((r + 1) * per);
+  const c = $('raster'); const reset = sizeCanvas(c); const ctx = c.getContext('2d'), Wc = c.width, Hc = c.height, col = 2;
+  if (!Wc) return;
+  if (reset) { ctx.fillStyle = '#0a0d18'; ctx.fillRect(0, 0, Wc, Hc); }
+  ctx.drawImage(c, col, 0, Wc - col, Hc, 0, 0, Wc - col, Hc); ctx.fillStyle = '#0a0d18'; ctx.fillRect(Wc - col, 0, col, Hc);
+  const n = readoutPos.length, per = n / Hc;
+  for (let r = 0; r < Hc; r++) { let v = 0; const lo = Math.floor(r * per), hi = Math.floor((r + 1) * per);
     for (let i = lo; i < hi; i++) { const p = readoutPos[i]; if (p >= 0 && a[p] > v) v = a[p]; }
-    if (v < 40) continue;
-    ctx.fillStyle = (r * per < nDescending ? `rgba(255,179,71,${v / 255})` : `rgba(255,92,92,${v / 255})`);
-    ctx.fillRect(Wc - col, r, col, 1);
-  }
+    if (v < 40) continue; ctx.fillStyle = (r * per < nDescending ? `rgba(255,179,71,${v / 255})` : `rgba(255,92,92,${v / 255})`); ctx.fillRect(Wc - col, r, col, 1); }
   ctx.fillStyle = 'rgba(28,35,56,.9)'; ctx.fillRect(0, Math.round(nDescending / per), Wc, 1);
 }
 function updateGroups() {
-  for (let g = 1; g < GROUP_COL.length; g++) {
-    const ids = groupIdx[g]; if (!ids || !ids.length) continue;
-    let s = 0; for (const i of ids) s += actTarget[i]; s /= ids.length;
-    $('gb' + g).style.width = Math.min(100, s * 300) + '%'; $('gv' + g).textContent = (s * 100).toFixed(1) + '%';
-  }
+  for (let g = 1; g < GROUP_COL.length; g++) { const ids = groupIdx[g]; if (!ids || !ids.length) continue;
+    let s = 0; for (const i of ids) s += actTarget[i]; s /= ids.length; groupMean[g] = s;
+    $('gb' + g).style.width = Math.min(100, s * 300) + '%'; $('gv' + g).textContent = (s * 100).toFixed(1) + '%'; }
 }
 function renderLinks(probs) {
   const box = $('links'); box.innerHTML = '';
-  links.forEach((l, i) => {
-    const p = probs ? probs[i] || 0 : 0;
-    const d = document.createElement('div'); d.className = 'link' + (i === chosen ? ' chosen' : '');
+  links.forEach((l, i) => { const p = probs ? probs[i] || 0 : 0; const d = document.createElement('div'); d.className = 'link' + (i === chosen ? ' chosen' : '');
     d.innerHTML = `<span class="i">${String(i).padStart(2, '0')}</span><div><div class="t"></div><div class="bar"><i style="width:${(p * 100).toFixed(1)}%"></i></div></div><span class="p">${probs ? (p * 100).toFixed(1) + '%' : ''}</span>`;
-    d.querySelector('.t').textContent = (l.text || '') + '  ' + l.url.replace(/^https?:\/\/[^/]+/, '');
-    box.appendChild(d);
-    if (i === chosen) d.scrollIntoView({ block: 'nearest' });
-  });
+    d.querySelector('.t').textContent = (l.text || '') + '  ' + l.url.replace(/^https?:\/\/[^/]+/, ''); box.appendChild(d); if (i === chosen) box.scrollTop = Math.max(0, d.offsetTop - box.clientHeight / 2); });   // scroll the card, never the page
 }
 function flash(color) { const f = $('flash'); f.style.background = `radial-gradient(ellipse at 15% 50%, ${color}, transparent 60%)`; f.style.opacity = 1; setTimeout(() => f.style.opacity = 0, 250); }
 const setFlyLabel = s => $('flylabel').innerHTML = `<b>Drosophila</b> · ${s}`;
-
-// ------------------------------------------------------------------ casino: balance tiles + dopamine curve
-const dopa = [];   // per spin: {r, cum}
 const fmt = v => v == null ? '—' : Number(v).toLocaleString('ru', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const EV_NAME = { goal: '🎯 цель +15%', lucky: '🍀 удачный слот', bust: '💸 слив', switch: '↪ смена слота', broke: '🚬 деньги кончились', refill: '💰 дали денег' };
 function showCasino(c, logEvents = false) {
   if (!c) return;
-  $('casino').style.display = 'block';
-  $('c-bal').textContent = fmt(c.balance); $('c-bet').textContent = fmt(c.bet); $('c-win').textContent = fmt(c.win);
+  $('c-bal').textContent = fmt(c.balance); $('c-bet').textContent = fmt(c.bet); $('c-win').textContent = fmt(c.win); $('c-demo').textContent = fmt(c.demo);
   $('c-win').style.color = c.delta > 0 ? 'var(--ok)' : c.delta < 0 ? 'var(--bad)' : '';
   if (c.drive) showDrive(c.drive);
-  if (logEvents) (c.events || []).forEach(e => log(`${EV_NAME[e.type] || e.type}: ${e.name} ${e.pct != null ? (e.pct >= 0 ? '+' : '') + e.pct + '%' : ''}`, e.type === 'bust' ? 'bad' : e.type === 'switch' ? '' : 'ok'));
+  if (logEvents) (c.events || []).forEach(e => log(`${EV_NAME[e.type] || e.type}: ${e.name || ''} ${e.pct != null ? (e.pct >= 0 ? '+' : '') + e.pct + '%' : ''}`, e.type === 'bust' || e.type === 'broke' ? 'bad' : e.type === 'switch' ? '' : 'ok'));
 }
-const EV_NAME = { goal: '🎯 цель +15%', lucky: '🍀 удачный слот', bust: '💸 слив', switch: '↪ смена слота' };
 function showDrive(d) {
   $('desire-bar').style.width = Math.round(d.desire * 100) + '%'; $('desire-v').textContent = Math.round(d.desire * 100) + '%';
   const pct = d.start ? ((d.session_net / d.start) * 100).toFixed(2) : null;
-  $('slotline').textContent = d.name ? `${d.name}${d.lucky ? ' 🍀' : d.unlucky ? ' ✗' : ''} · ${d.session_spins} спинов · ${d.session_net >= 0 ? '+' : ''}${fmt(d.session_net)} FUN${pct != null ? ' (' + (pct >= 0 ? '+' : '') + pct + '%)' : ''} · серия ${d.loss_streak ? d.loss_streak + ' проигр.' : d.win_streak + ' выигр.'}${d.target_bet ? ' · хочет ставку ' + fmt(d.target_bet) : ''}${d.reason ? ' · ' + d.reason : ''}` : 'выбирает слот…';
+  $('slotline').textContent = d.broke ? `банк пуст — ${d.name || 'слот'}: ${d.session_spins} спинов, ${fmt(d.session_net)} FUN · ждёт денег` : d.name ? `${d.name}${d.lucky ? ' 🍀' : d.unlucky ? ' ✗' : ''} · ${d.session_spins} спинов · ${d.session_net >= 0 ? '+' : ''}${fmt(d.session_net)} FUN${pct != null ? ' (' + (pct >= 0 ? '+' : '') + pct + '%)' : ''} · серия ${d.loss_streak ? d.loss_streak + ' проигр.' : d.win_streak + ' выигр.'}${d.target_bet ? ' · хочет ставку ' + fmt(d.target_bet) : ''}${d.reason ? ' · ' + d.reason : ''}` : 'выбирает слот…';
   const ev = $('events'); ev.innerHTML = '';
   (d.events || []).forEach(e => { const x = document.createElement('div'); x.className = e.type; x.textContent = `${e.time}  ${EV_NAME[e.type] || e.type}  ${e.name || ''}${e.pct != null ? '  ' + (e.pct >= 0 ? '+' : '') + e.pct + '%' : ''}${e.balance != null ? '  ' + fmt(e.balance) : ''}${e.why ? '  ' + e.why : ''}`; ev.appendChild(x); });
   const sl = $('slots'); sl.innerHTML = '<span class="n">слот</span><span>спины</span><span>итог</span><span>лучш.</span>';
   (d.slots || []).forEach(s => { const cls = s.lucky ? 'lucky' : s.unlucky ? 'unlucky' : ''; sl.insertAdjacentHTML('beforeend', `<span class="n ${cls}">${s.lucky ? '🍀 ' : s.unlucky ? '✗ ' : ''}${s.name}</span><span>${s.spins}</span><span class="${cls}">${s.net >= 0 ? '+' : ''}${s.net}</span><span>${s.best_pct >= 0 ? '+' : ''}${s.best_pct}%</span>`); });
 }
 function drawDopa() {
-  const c = $('dopa'); if (c.width !== c.clientWidth) c.width = c.clientWidth;
-  const ctx = c.getContext('2d'), Wc = c.width, Hc = c.height, n = dopa.length;
-  ctx.clearRect(0, 0, Wc, Hc);
-  ctx.fillStyle = '#7b85a6'; ctx.font = '10px Consolas';
+  const c = $('dopa'); sizeCanvas(c); const ctx = c.getContext('2d'), Wc = c.width, Hc = c.height, n = dopa.length;
+  ctx.clearRect(0, 0, Wc, Hc); ctx.fillStyle = '#7b85a6'; ctx.font = '10px Consolas';
   if (!n) { ctx.fillText('кривая дофамина: столбики — реакция на спин, линия — накопленная', 6, 12); return; }
-  const bw = Math.max(2, Math.min(10, (Wc - 8) / n)), mid = Hc * 0.55;
-  const rmax = Math.max(1, ...dopa.map(d => Math.abs(d.r)));
+  const bw = Math.max(2, Math.min(10, (Wc - 8) / n)), mid = Hc * 0.55, rmax = Math.max(1, ...dopa.map(d => Math.abs(d.r)));
   dopa.forEach((d, i) => { const h = d.r / rmax * (Hc * 0.4); ctx.fillStyle = d.r >= 0 ? 'rgba(255,217,59,.85)' : 'rgba(255,77,210,.85)'; ctx.fillRect(4 + i * bw, h >= 0 ? mid - h : mid, bw - 1, Math.abs(h) || 1); });
   const cmin = Math.min(0, ...dopa.map(d => d.cum)), cmax = Math.max(0, ...dopa.map(d => d.cum)), span = Math.max(1e-6, cmax - cmin);
-  ctx.beginPath();
-  dopa.forEach((d, i) => { const x = 4 + i * bw + bw / 2, y = Hc - 4 - (d.cum - cmin) / span * (Hc - 8); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
-  ctx.strokeStyle = '#57d6ff'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.beginPath(); dopa.forEach((d, i) => { const x = 4 + i * bw + bw / 2, y = Hc - 4 - (d.cum - cmin) / span * (Hc - 8); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.strokeStyle = '#57d6ff'; ctx.lineWidth = 1.5; ctx.stroke();
   ctx.fillStyle = '#7b85a6'; ctx.fillText(`Σ ${dopa[n - 1].cum.toFixed(2)}`, Wc - 60, 11); ctx.fillText(`${n} спинов`, 6, 11);
 }
+function redrawCharts() { drawTrace(); drawDopa(); if (actBytes) drawRaster(actBytes); }
 
-// ------------------------------------------------------------------ events from python
+// ================================================================== events from python
 let total = 0;
 const es = new EventSource('/events');
 es.onmessage = ev => {
   const m = JSON.parse(ev.data);
   $('wait').style.display = 'none';
   if (m.t === 'act') {
-    // spike bitmask (1 bit / neuron): a spike lights the neuron up, everything else decays here
     if (!actTarget) return;
-    const bits = Uint8Array.from(atob(m.a || m.s), c => c.charCodeAt(0));
-    let frac = 0;
-    for (let i = 0; i < N; i++) {
-      if (bits[i >> 3] & (128 >> (i & 7))) { actTarget[i] = 1; frac++; } else actTarget[i] *= 0.55;
-      actBytes[i] = actTarget[i] * 255;
-    }
+    const bits = Uint8Array.from(atob(m.s), c => c.charCodeAt(0)); let frac = 0;
+    for (let i = 0; i < N; i++) { const sp = bits[i >> 3] & (128 >> (i & 7)); if (sp) { actTarget[i] = 1; frac++; } else actTarget[i] *= 0.55; actBytes[i] = actTarget[i] * 255; actSlow[i] += ((sp ? 1 : 0) - actSlow[i]) * 0.08; }
     rateHist.push(frac / Math.max(1, N)); if (rateHist.length > 400) { rateHist.shift(); rewardMarks.forEach(r => r.i--); }
     while (rewardMarks.length && rewardMarks[0].i < 0) rewardMarks.shift();
     $('s-rate').textContent = (frac / Math.max(1, N) * 100).toFixed(1) + '%';
-    drawTrace(); drawRaster(actBytes); updateGroups();
+    drawTrace(); drawRaster(actBytes); updateGroups(); updateHot();
+  } else if (m.t === 'frame') {
+    $('shot').src = 'data:image/jpeg;base64,' + m.jpg;
   } else if (m.t === 'page') {
     links = m.links; chosen = -1; showTip(-1);
     $('shot').src = m.jpg ? 'data:image/jpeg;base64,' + m.jpg : 'data:image/png;base64,' + m.png;
-    const short = m.url.replace(/^https?:\/\//, '');
-    $('url').textContent = short; $('tabtitle').textContent = m.title || short;
+    const short = m.url.replace(/^https?:\/\//, ''); $('url').textContent = short; $('tabtitle').textContent = m.title || short;
     try { const u = new URL(m.url); $('fav').src = u.origin + '/favicon.ico'; } catch (e) {}
-    const sess = $('sess'); sess.textContent = m.session ? 'сессия: вошла (PHPSESSID)' : 'гость'; sess.className = 'sess' + (m.session ? ' on' : '');
+    const sess = $('sess'); sess.textContent = m.session ? 'сессия: вошла' : 'гость'; sess.className = 'sess' + (m.session ? ' on' : '');
     $('s-ep').textContent = m.episode; $('s-step').textContent = m.step;
     $('inline').textContent = `эпизод ${m.episode} · шаг ${m.step} · ${m.links.length} ${m.casino ? 'действий' : 'ссылок'}`;
-    $('status').textContent = m.casino ? `демо-счёт ${fmt(m.casino.balance)} FUN · ставка ${fmt(m.casino.bet)} · последний выигрыш ${fmt(m.casino.win)}`
-                                       : 'смотрит на страницу — сетчатка → зрительные доли → нисходящие нейроны';
-    showCasino(m.casino);
-    renderLinks(null); drawOverlay(); takeOff();
-    setFlyLabel(flyCtl.paused ? 'прогнана — сидит и ждёт' : m.casino && m.casino.phase === 'lobby' ? 'ищет слот' : m.casino ? 'крутит слоты (демо-счёт)' : 'смотрит');
-    log(m.casino ? `демо-счёт: ${fmt(m.casino.balance)} FUN, ${m.links.length} действий (спин + ставки)`
-                 : `страница: ${m.url.replace(/^https?:\/\/[^/]+/, '') || '/'}  (${m.links.length} ссылок)`);
+    $('status').textContent = m.casino ? `банк ${fmt(m.casino.balance)} FUN · ставка ${fmt(m.casino.bet)} · выигрыш ${fmt(m.casino.win)}` : 'смотрит на страницу — сетчатка → зрительные доли → нисходящие нейроны';
+    showCasino(m.casino); renderLinks(null); drawOverlay(); takeOff();
+    setFlyLabel(flyCtl.broke ? 'проигралась — курит и ждёт' : flyCtl.paused ? 'прогнана — сидит и ждёт' : m.casino && m.casino.phase === 'lobby' ? 'ищет слот' : m.casino ? 'крутит слоты' : 'смотрит');
+    log(m.casino ? `${m.casino.phase === 'lobby' ? 'лобби' : 'слот'}: банк ${fmt(m.casino.balance)} FUN, ${m.links.length} действий` : `страница: ${m.url.replace(/^https?:\/\/[^/]+/, '') || '/'}  (${m.links.length} ссылок)`);
   } else if (m.t === 'decision') {
     chosen = m.a; renderLinks(m.p); drawOverlay(); showTip(chosen);
-    if (links[chosen]) {
-      const [sx, sy] = linkScreen(links[chosen].box);
-      flyTo(s2w(sx, sy, 8), 'landed', 1.4); setFlyLabel('летит к ссылке');
-      const hid = links[chosen].box[2] <= 0 ? ' (скрытая ссылка в меню)' : '';
-      $('status').textContent = `клик: ${links[chosen].text || links[chosen].url}`;
-      log(`решение: #${chosen} ${links[chosen].text || links[chosen].url}  p=${(m.p[chosen] * 100).toFixed(1)}%${hid}`, 'act');
-    }
+    if (links[chosen]) { const [sx, sy] = linkScreen(links[chosen].box); flyTo(toWorld(sx, sy, 6), 'landed', links[chosen].box); setFlyLabel('летит к цели');
+      $('status').textContent = `клик: ${links[chosen].text || links[chosen].url}`; log(`решение: #${chosen} ${links[chosen].text || links[chosen].url}  p=${(m.p[chosen] * 100).toFixed(1)}%${links[chosen].box[2] <= 0 ? ' (скрытая ссылка в меню)' : ''}`, 'act'); }
   } else if (m.t === 'reward') {
     total = m.total; $('s-ret').textContent = (total >= 0 ? '+' : '') + total.toFixed(1);
     rewardMarks.push({ i: rateHist.length - 1, r: m.r });
-    if (m.casino) {
-      dopa.push({ r: m.r, cum: total }); if (dopa.length > 300) dopa.shift();
-      drawDopa(); showCasino(m.casino, true);
-      const d = m.casino.delta || 0;
+    if (m.casino) { dopa.push({ r: m.r, cum: total }); if (dopa.length > 300) dopa.shift(); drawDopa(); showCasino(m.casino, true); const d = m.casino.delta || 0;
       if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(`спин: ${d.toFixed(2)} FUN → PPL101 (аверсивный дофамин ${m.r.toFixed(2)})`, 'bad'); }
       else if (m.r > 0) { pamFlash = 1; flash('rgba(255,217,59,0.3)'); log(`спин: +${d.toFixed(2)} FUN → PAM (дофамин +${m.r.toFixed(2)})`, 'ok'); }
-      else log('спин: баланс не изменился');
-    } else if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(`награда ${m.r.toFixed(1)} → дофамин PPL101 (аверсивный сигнал)`, 'bad'); }
-    else { pamFlash = 1; flash('rgba(94,226,154,0.25)'); log(`награда +${m.r.toFixed(1)} — новая страница → PAM`, 'ok'); }
-    if (m.done) log(`эпизод завершён, сумма ${total.toFixed(1)}`);
-  } else if (m.t === 'public') {
-    if (window.showRemote) showRemote(m.on, m.lan_url, m.tunnel_url);
-  } else if (m.t === 'frame') {
-    $('shot').src = 'data:image/jpeg;base64,' + m.jpg;
-  } else if (m.t === 'reload') {
-    location.reload();
-  } else if (m.t === 'state') {
-    applyState(m);
-  }
+    } else if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(`награда ${m.r.toFixed(1)} → PPL101`, 'bad'); }
+    else { pamFlash = 1; flash('rgba(94,226,154,0.25)'); log(`награда +${m.r.toFixed(1)} → PAM`, 'ok'); }
+  } else if (m.t === 'public') { if (window.showRemote) showRemote(m.on, m.lan_url, m.tunnel_url); }
+  else if (m.t === 'reload') location.reload();
+  else if (m.t === 'state') applyState(m);
 };
-// the fly restarts when its code is updated (fly.serve): wait for the server, then reload the page
 let lost = false;
 es.onerror = () => { lost = true; $('wait').style.display = 'block'; $('wait').textContent = 'муха перезапускается… переподключение'; };
 es.onopen = () => { if (lost) location.reload(); };
 
-// ------------------------------------------------------------------ animation loop
+// ================================================================== animation loop
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), qA = new THREE.Quaternion(), qB = new THREE.Quaternion(), qC = new THREE.Quaternion(), qTarget = new THREE.Quaternion();
 const AX_X = new THREE.Vector3(1, 0, 0), AX_Y = new THREE.Vector3(0, 1, 0), AX_Z = new THREE.Vector3(0, 0, 1);
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 let lastNow = 0;
-function steer(fs, target, dt, k, damp, maxSpeed) {   // damped spring: acceleration towards target
-  tmp.copy(target).sub(fs.pos).multiplyScalar(k).addScaledVector(fs.vel, -damp);
-  fs.vel.addScaledVector(tmp, dt);
-  const sp = fs.vel.length(); if (sp > maxSpeed) fs.vel.multiplyScalar(maxSpeed / sp);
-  fs.pos.addScaledVector(fs.vel, dt);
-}
-function orientFlying(fs, dt) {   // nose along the velocity, bank into turns, pitch with climbs; smoothed
+function steer(fs, target, dt, kk, damp, maxSpeed) { tmp.copy(target).sub(fs.pos).multiplyScalar(kk).addScaledVector(fs.vel, -damp); fs.vel.addScaledVector(tmp, dt); const sp = fs.vel.length(); if (sp > maxSpeed) fs.vel.multiplyScalar(maxSpeed / sp); fs.pos.addScaledVector(fs.vel, dt); }
+function orientFlying(fs, dt) {
   if (fs.vel.length() > 25) fs.heading.lerp(tmp2.copy(fs.vel).normalize(), Math.min(1, dt * 6)).normalize();
-  tmp.copy(fs.pos).add(fs.heading);
-  flyRoot.position.copy(fs.pos); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp);
-  flyRoot.rotateZ(clamp(-fs.vel.x * 0.0012, -0.55, 0.55)); flyRoot.rotateX(clamp(-fs.vel.y * 0.0006, -0.35, 0.35));
-  flyRoot.rotateX(0.35);   // a hovering fly hangs nose-up
+  tmp.copy(fs.pos).add(fs.heading); flyRoot.position.copy(fs.pos); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp);
+  flyRoot.rotateZ(clamp(-fs.vel.x * 0.0012, -0.55, 0.55)); flyRoot.rotateX(clamp(-fs.vel.y * 0.0006, -0.35, 0.35)); flyRoot.rotateX(0.35);
   qA.copy(flyRoot.quaternion); flyRoot.quaternion.copy(qTarget).slerp(qA, Math.min(1, dt * 9));
 }
 function animate(now) {
   requestAnimationFrame(animate);
   const t = now / 1000, dt = Math.min(0.05, (now - lastNow) / 1000 || 0.016), fs = flyState; lastNow = now;
-  let grounded = false, landing = 0, walking = false;
+  let grounded = false, landing = 0, walking = false, smoking = false;
   if (fs.mode === 'fly') {
-    if (fs.walk) {   // walking: straight line over the screen, seen from above, quick little steps
-      walking = grounded = true;
-      steer(fs, fs.target, dt, 9, 6.5, 260);
-      tmp.copy(fs.target).sub(fs.pos);
-      const dist = tmp.length();
-      fs.pos.z = 4;
-      qTarget.copy(landedQ); flyRoot.position.copy(fs.pos);
-      if (dist > 6) { qB.setFromAxisAngle(AX_Z, Math.atan2(tmp.y, tmp.x) - Math.PI / 2); qTarget.copy(qB).multiply(landedQ); }
-      flyRoot.quaternion.slerp(qTarget, Math.min(1, dt * 8));
-      fs.phase += fs.vel.length() * dt * 0.09;
-      if (dist < 6 && fs.vel.length() < 40) { fs.mode = fs.after; fs.vel.set(0, 0, 0); }
+    if (fs.targetBox) { const [sx, sy] = linkScreen(fs.targetBox); fs.target.set(sx - W / 2, H / 2 - sy, 6); }   // follow the box if the card moved
+    if (fs.walk) {
+      walking = grounded = true; steer(fs, fs.target, dt, 9, 6.5, 260); tmp.copy(fs.target).sub(fs.pos); const dist = tmp.length(); fs.pos.z = 4;
+      qTarget.copy(landedQ); flyRoot.position.copy(fs.pos); if (dist > 6) { qB.setFromAxisAngle(AX_Z, Math.atan2(tmp.y, tmp.x) - Math.PI / 2); qTarget.copy(qB).multiply(landedQ); }
+      flyRoot.quaternion.slerp(qTarget, Math.min(1, dt * 8)); fs.phase += fs.vel.length() * dt * 0.09;
+      if (dist < 6 && fs.vel.length() < 40) { fs.mode = fs.after; fs.vel.set(0, 0, 0); fs.pos.copy(fs.target); }
     } else {
-      const goal = fs.waypoint || fs.target;
-      steer(fs, goal, dt, fs.waypoint ? 10 : 16, fs.waypoint ? 4.5 : 7.5, 1500);
-      fs.vel.x += noise(t, 3.1, 7.7) * 90 * dt; fs.vel.y += noise(t + 5, 2.3, 6.1) * 90 * dt;   // gusts
+      const goal = fs.waypoint || fs.target; steer(fs, goal, dt, fs.waypoint ? 10 : 16, fs.waypoint ? 4.5 : 7.5, 1500);
+      fs.vel.x += noise(t, 3.1, 7.7) * 90 * dt; fs.vel.y += noise(t + 5, 2.3, 6.1) * 90 * dt;
       if (fs.waypoint && fs.pos.distanceTo(fs.waypoint) < 70) fs.waypoint = null;
       orientFlying(fs, dt);
-      const dist = fs.pos.distanceTo(fs.target);
-      if (!fs.waypoint && dist < 5 && fs.vel.length() < 60) { fs.mode = fs.after; fs.vel.set(0, 0, 0); fs.pos.copy(fs.target); fs.landedAt = now; }
+      if (!fs.waypoint && fs.pos.distanceTo(fs.target) < 5 && fs.vel.length() < 60) { fs.mode = fs.after; fs.vel.set(0, 0, 0); fs.pos.copy(fs.target); fs.landedAt = now; }
     }
-    if (fs.mode === 'landed') { const b = links[chosen] && links[chosen].box; if (b) { const [rx, ry] = boxCenter(b); ripple = { t0: now, x: rx, y: ry }; } setFlyLabel('села на ссылку'); }
+    if (fs.mode === 'landed') { const b = links[chosen] && links[chosen].box; if (b) { const [rx, ry] = boxCenter(b); ripple = { t0: now, x: rx, y: ry }; } setFlyLabel('села на цель'); }
   } else if (fs.mode === 'hover') {
-    if (flyCtl.anim === 'walk') fs.mode = 'walk';
-    // drifting hover around home: a wandering target, spring-followed, so the body keeps tilting naturally
+    if (flyCtl.broke) fs.mode = 'smoke'; else if (flyCtl.anim === 'walk') fs.mode = 'walk';
     tmp2.set(fs.home.x + noise(t * 0.5, 1.0, 2.6) * 40, fs.home.y + noise(t * 0.5 + 9, 1.7, 3.9) * 22, 22 + noise(t * 0.4 + 3, 1.3, 2.9) * 18);
-    steer(fs, tmp2, dt, 6, 3.2, 400);
-    fs.vel.x += noise(t, 4.3, 9.1) * 40 * dt; fs.vel.y += noise(t + 2, 5.1, 8.3) * 60 * dt;
-    orientFlying(fs, dt);
-  } else if (fs.mode === 'walk') {   // grounded at home: wanders a little, turns to where it goes
-    if (flyCtl.anim !== 'walk') { fs.mode = 'hover'; }
+    steer(fs, tmp2, dt, 6, 3.2, 400); fs.vel.x += noise(t, 4.3, 9.1) * 40 * dt; fs.vel.y += noise(t + 2, 5.1, 8.3) * 60 * dt; orientFlying(fs, dt);
+  } else if (fs.mode === 'walk') {
+    if (flyCtl.broke) fs.mode = 'smoke'; else if (flyCtl.anim !== 'walk') fs.mode = 'hover';
     walking = grounded = true;
-    if (!fs.walkGoal || fs.pos.distanceTo(fs.walkGoal) < 8 || t > (fs.walkUntil || 0)) {
-      fs.walkGoal = new THREE.Vector3(fs.home.x + (Math.random() - 0.5) * 160, fs.home.y - 30 + (Math.random() - 0.5) * 40, 4); fs.walkUntil = t + 2 + Math.random() * 3;
-    }
-    const resting = t % 7 < 2.5;   // stops now and then, grooming pause
-    steer(fs, resting ? fs.pos : fs.walkGoal, dt, 7, 6, 120); fs.pos.z = 4;
-    tmp.copy(fs.walkGoal).sub(fs.pos);
+    if (!fs.walkGoal || fs.pos.distanceTo(fs.walkGoal) < 8 || t > (fs.walkUntil || 0)) { fs.walkGoal = new THREE.Vector3(fs.home.x + (Math.random() - 0.5) * 160, fs.floor + (Math.random() - 0.5) * 40, 4); fs.walkUntil = t + 2 + Math.random() * 3; }
+    const resting = t % 7 < 2.5; steer(fs, resting ? fs.pos : fs.walkGoal, dt, 7, 6, 120); fs.pos.z = 4; tmp.copy(fs.walkGoal).sub(fs.pos);
     qTarget.copy(landedQ); if (tmp.length() > 6 && !resting) { qB.setFromAxisAngle(AX_Z, Math.atan2(tmp.y, tmp.x) - Math.PI / 2); qTarget.copy(qB).multiply(landedQ); }
-    flyRoot.position.copy(fs.pos); flyRoot.quaternion.slerp(qTarget, Math.min(1, dt * 6));
-    fs.phase += fs.vel.length() * dt * 0.09;
+    flyRoot.position.copy(fs.pos); flyRoot.quaternion.slerp(qTarget, Math.min(1, dt * 6)); fs.phase += fs.vel.length() * dt * 0.09;
+  } else if (fs.mode === 'smoke') {   // broke: sits on the floor of its card, side-on, smoking; the gear menu can hand it money
+    if (!flyCtl.broke) fs.mode = flyCtl.anim === 'walk' ? 'walk' : 'hover';
+    grounded = smoking = true;
+    tmp2.set(fs.home.x, fs.floor, 6); steer(fs, tmp2, dt, 8, 7, 200);
+    flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t * 1.3) * 1.5;
+    tmp.set(fs.pos.x + 1, fs.pos.y + 0.05, fs.pos.z + 0.55); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp); flyRoot.rotateX(-0.15); qA.copy(flyRoot.quaternion); flyRoot.quaternion.copy(qTarget).slerp(qA, Math.min(1, dt * 5));
   } else if (fs.mode === 'landed') {
-    grounded = true;
-    landing = clamp(1 - (now - fs.landedAt) / 350, 0, 1);            // touchdown squash
-    flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t * 9) * 0.4;
-    flyRoot.quaternion.slerp(landedQ, Math.min(1, dt * 10));
+    grounded = true; landing = clamp(1 - (now - fs.landedAt) / 350, 0, 1);
+    if (fs.targetBox) { const [sx, sy] = linkScreen(fs.targetBox); fs.pos.set(sx - W / 2, H / 2 - sy, 6); }   // stays glued to the element even if its card moves
+    flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t * 9) * 0.4; flyRoot.quaternion.slerp(landedQ, Math.min(1, dt * 10));
   }
-  // body: touchdown squash + breathing abdomen; legs tucked in flight, stepping when walking
   const squash = 1 - 0.18 * Math.sin(Math.PI * landing);
   if (fly.model) fly.model.scale.set(1 + 0.08 * (1 - squash), squash, 1 + 0.06 * (1 - squash));
-  if (fly.body) { const br = 1 + 0.02 * Math.sin(t * 5.2); fly.body.scale.set(1, br, 1); }
-  if (fly.legs) {
-    const tuck = (fly.tuck = (fly.tuck || 0) + ((grounded ? 0 : 1) - (fly.tuck || 0)) * Math.min(1, dt * 8));
-    qA.setFromAxisAngle(AX_X, 0.55 * tuck); qB.setFromAxisAngle(AX_Y, walking ? Math.sin(fs.phase * 2.2) * 0.07 : 0);
-    fly.legs.quaternion.copy(qA).multiply(qB);
-  }
-  // wings: folded over the back when grounded; spread and beating in the air, feathering on each stroke,
-  // faint ghost copies at other phases so the beat reads as a blur
+  if (fly.body) fly.body.scale.set(1, 1 + 0.02 * Math.sin(t * 5.2), 1);
+  if (fly.legs) { const tuck = (fly.tuck = (fly.tuck || 0) + ((grounded ? 0 : 1) - (fly.tuck || 0)) * Math.min(1, dt * 8)); qA.setFromAxisAngle(AX_X, 0.55 * tuck); qB.setFromAxisAngle(AX_Y, walking ? Math.sin(fs.phase * 2.2) * 0.07 : 0); fly.legs.quaternion.copy(qA).multiply(qB); }
   fly.spread = (fly.spread || 0) + ((grounded ? 0 : 1.25) - (fly.spread || 0)) * Math.min(1, dt * 7);
   const beat = t * 88 + Math.sin(t * 3) * 0.6, amp = grounded ? 0 : (0.5 + 0.08 * Math.sin(t * 2.7)) * Math.min(1, fly.spread);
-  fly.wings.forEach(w => {
-    const set = (pivot, ph) => { const f = Math.sin(beat + ph) * amp, feather = Math.cos(beat + ph) * 0.3 * amp;
-      qA.setFromAxisAngle(AX_Z, w.s * f); qB.setFromAxisAngle(AX_Y, -w.s * fly.spread); qC.setFromAxisAngle(AX_X, feather);
-      pivot.quaternion.copy(qA).multiply(qB).multiply(qC); };
-    set(w.pivot, 0);
-    w.ghosts.forEach(g => { g.mesh.visible = amp > 0.05; set(g.pivot, g.ph); });
-  });
-  if (ripple) drawOverlay();
-  if (points) {
-    updateColors(); if (dopaFlash > 0) dopaFlash = Math.max(0, dopaFlash - 0.02); if (pamFlash > 0) pamFlash = Math.max(0, pamFlash - 0.02);
-    if (!spin.drag && ++spin.idle > 60) spin.y += 0.0025;
-    brainGroup.rotation.set(spin.x, spin.y, 0);
+  fly.wings.forEach(w => { const set = (pivot, ph) => { const f = Math.sin(beat + ph) * amp, feather = Math.cos(beat + ph) * 0.3 * amp; qA.setFromAxisAngle(AX_Z, w.s * f); qB.setFromAxisAngle(AX_Y, -w.s * fly.spread); qC.setFromAxisAngle(AX_X, feather); pivot.quaternion.copy(qA).multiply(qB).multiply(qC); };
+    set(w.pivot, 0); w.ghosts.forEach(g => { g.mesh.visible = amp > 0.05; set(g.pivot, g.ph); }); });
+  // cigarette + smoke
+  if (fly.cig) {
+    fly.cig.group.visible = smoking; smokePts.visible = smoking;
+    if (smoking) {
+      const puff = 0.5 + 0.5 * Math.sin(t * 1.1); fly.cig.ember.material.color.setRGB(1, 0.25 + 0.35 * puff, 0); fly.cig.glow.intensity = 0.3 + puff * 0.9;
+      fly.cig.ember.getWorldPosition(fly.cig.tip);
+      if (now - smoke.last > 90) { smoke.last = now; const i = smoke.next++ % SMOKE; smoke.pos[i * 3] = fly.cig.tip.x; smoke.pos[i * 3 + 1] = fly.cig.tip.y; smoke.pos[i * 3 + 2] = fly.cig.tip.z; smoke.age[i] = 0; smoke.vel[i].set(10 + Math.random() * 12, 28 + Math.random() * 18, 0); }
+      for (let i = 0; i < SMOKE; i++) { if (smoke.age[i] > 3) continue; smoke.age[i] += dt; smoke.pos[i * 3] += (smoke.vel[i].x + Math.sin(t * 2 + i) * 14) * dt; smoke.pos[i * 3 + 1] += smoke.vel[i].y * dt; if (smoke.age[i] > 3) smoke.pos[i * 3 + 1] = -99999; }
+      smokeGeo.attributes.position.needsUpdate = true;
+    }
   }
+  if (ripple) drawOverlay();
+  if (points) { updateColors(); if (dopaFlash > 0) dopaFlash = Math.max(0, dopaFlash - 0.02); if (pamFlash > 0) pamFlash = Math.max(0, pamFlash - 0.02); if (!spin.drag && ++spin.idle > 60) spin.y += 0.0025; brainGroup.rotation.set(spin.x, spin.y, 0); }
   renderer.render(scene, camera);
 }
+applyLayout(layoutState || defaultLayout());
 resize(); loadBrain(); requestAnimationFrame(animate);
 </script>
 </body>

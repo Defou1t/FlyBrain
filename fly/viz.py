@@ -131,7 +131,7 @@ class VizServer:
         self.tunnel = None
         self.tunnel_provider = tunnel_provider
         self.commands: queue.Queue = queue.Queue()          # page -> agent loop
-        self.state = {"paused": False, "mode": "browse"}    # what the fly is doing now
+        self.state = {"paused": False, "mode": "browse", "broke": False}    # what the fly is doing now
         self.clients: list[Client] = []
         self.lock = threading.Lock()
         self.gz_cache: dict[str, bytes] = {}
@@ -243,7 +243,7 @@ class VizServer:
                     if not local:
                         return self._send(b"forbidden", "text/plain", 403)
                     do = parse_qs(u.query).get("do", [""])[0]
-                    if do not in ("pause", "resume", "casino", "browse"):
+                    if do not in ("pause", "resume", "casino", "browse", "refill"):
                         return self._send(b"unknown command", "text/plain", 400)
                     server.commands.put(do)
                     self._send(json.dumps({"queued": do, "state": server.state}).encode(), "application/json")
