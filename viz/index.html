@@ -107,7 +107,7 @@
   #slots .lucky { color:#ffd93b; } #slots .unlucky { color:var(--bad); }
   #dopawrap { height:110px; margin:6px 0; }
 
-  #gl { position:fixed; inset:0; pointer-events:none; z-index:10; }
+  #gl { position:fixed; left:0; top:0; width:100vw; height:100vh; pointer-events:none; z-index:10; }   /* explicit size: with Windows scaling (DPR 1.25/1.5) the backing store is bigger than the window and would stretch the canvas */
   #flash { position:fixed; inset:0; pointer-events:none; opacity:0; transition:opacity .25s; z-index:5; }
   #wait { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); color:var(--dim); font-size:14px; z-index:6; background:rgba(7,9,15,.85); padding:8px 14px; border-radius:6px; }
 </style>
@@ -599,8 +599,12 @@ function orientFlying(fs, dt) {
   flyRoot.rotateZ(clamp(-fs.vel.x * 0.0012, -0.55, 0.55)); flyRoot.rotateX(clamp(-fs.vel.y * 0.0006, -0.35, 0.35)); flyRoot.rotateX(0.35);
   qA.copy(flyRoot.quaternion); flyRoot.quaternion.copy(qTarget).slerp(qA, Math.min(1, dt * 9));
 }
+let lastDpr = devicePixelRatio;
 function animate(now) {
   requestAnimationFrame(animate);
+  if (innerWidth !== W || innerHeight !== H || devicePixelRatio !== lastDpr) {   // missed resize / zoom / DPI change
+    lastDpr = devicePixelRatio; renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); if (!manualLayout) applyLayout(defaultLayout()); resize();
+  }
   const t = now / 1000, dt = Math.min(0.05, (now - lastNow) / 1000 || 0.016), fs = flyState; lastNow = now;
   let grounded = false, landing = 0, walking = false, smoking = false;
   if (fs.mode === 'fly') {
