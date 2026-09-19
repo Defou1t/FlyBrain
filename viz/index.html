@@ -142,6 +142,7 @@
   <div class="card" id="card-casino" data-id="casino"><div class="card-h"><span>Банк мухи · азарт</span><span class="sp"></span><button class="max">⤢</button></div>
     <div class="card-b">
       <div class="tiles"><div><b id="c-bal">—</b><span>банк FUN</span></div><div><b id="c-bet">—</b><span>ставка</span></div><div><b id="c-win">—</b><span>выигрыш</span></div><div><b id="c-demo">—</b><span>демо-счёт</span></div></div>
+      <div class="tiles" style="margin-top:6px"><div title=""><b id="c-min" style="color:var(--bad)">—</b><span id="c-min-l">мин. банк</span></div><div title=""><b id="c-max" style="color:var(--ok)">—</b><span id="c-max-l">макс. банк</span></div><div><b id="c-spins">—</b><span>спинов</span></div><div><b id="c-since">—</b><span>сессия с</span></div></div>
       <div id="dopawrap"><canvas id="dopa" class="wide"></canvas></div>
       <div id="drive">
         <div class="grp"><span>азарт</span><div class="b"><i id="desire-bar" style="background:linear-gradient(90deg,#ff5c7a,#ffd93b,#5ee29a)"></i></div><span class="v" id="desire-v">—</span></div>
@@ -521,6 +522,12 @@ function showCasino(c, logEvents = false) {
 }
 function showDrive(d) {
   $('desire-bar').style.width = Math.round(d.desire * 100) + '%'; $('desire-v').textContent = Math.round(d.desire * 100) + '%';
+  if (d.bank_min != null) {     // extremes of the fly's bank since the money was handed over (a refill starts over)
+    $('c-min').textContent = fmt(d.bank_min); $('c-max').textContent = fmt(d.bank_max);
+    $('c-min-l').textContent = 'мин. банк' + (d.bank_min_at ? ' · ' + d.bank_min_at.slice(6) : ''); $('c-max-l').textContent = 'макс. банк' + (d.bank_max_at ? ' · ' + d.bank_max_at.slice(6) : '');
+    $('c-min').parentNode.title = d.bank_min_at ? 'минимум ' + d.bank_min_at : ''; $('c-max').parentNode.title = d.bank_max_at ? 'максимум ' + d.bank_max_at : '';
+    $('c-spins').textContent = d.spins_total ?? '—'; $('c-since').textContent = d.since || '—';
+  }
   const pct = d.start ? ((d.session_net / d.start) * 100).toFixed(2) : null;
   $('slotline').textContent = d.broke ? `банк пуст — ${d.name || 'слот'}: ${d.session_spins} спинов, ${fmt(d.session_net)} FUN · ждёт денег` : d.name ? `${d.name}${d.lucky ? ' 🍀' : d.unlucky ? ' ✗' : ''} · ${d.session_spins} спинов · ${d.session_net >= 0 ? '+' : ''}${fmt(d.session_net)} FUN${pct != null ? ' (' + (pct >= 0 ? '+' : '') + pct + '%)' : ''} · серия ${d.loss_streak ? d.loss_streak + ' проигр.' : d.win_streak + ' выигр.'}${d.target_bet ? ' · хочет ставку ' + fmt(d.target_bet) : ''}${d.reason ? ' · ' + d.reason : ''}` : 'выбирает слот…';
   const ev = $('events'); ev.innerHTML = '';

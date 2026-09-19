@@ -21,7 +21,8 @@ EVENTS = os.path.join(DATA, "events.jsonl")
 LUCKY_PCT = 0.10       # slot counts as lucky when the session balance is +10 % over its start
 GOAL_PCT = 0.15        # goal: +15 % over the start balance -> recorded, start re-based
 BUST_PCT = -0.30       # bust: -30 % from the start (the demo balance never really hits zero)
-LOSS_STREAK_SWITCH = 6 # this many losses in a row -> change the slot
+LOSS_STREAK_SWITCH = 6 # this many dead spins (win = 0) in a row -> change the slot
+UNLUCKY_TTL = 45 * 60  # an unlucky slot is avoided for this long, then it gets another chance
 REST_DESIRE = 0.10     # below this the fly leaves the casino for a walk
 SWITCH_DESIRE = 0.18   # below this it tries another slot
 MAX_BET = 40.0
@@ -33,6 +34,10 @@ class Drive:
         self.path, self.events_path = path, events_path
         self.desire = 0.6
         self.bank = BANK            # virtual balance, persists across slots and restarts
+        self.bank_min = self.bank_max = BANK      # extremes since the money was handed over (refill resets)
+        self.bank_min_at = self.bank_max_at = ""
+        self.since = datetime.now().strftime("%d.%m %H:%M")
+        self.spins_total = 0
         self.slots: dict[str, dict] = {}
         self.events: list[dict] = []
         self.slot: str | None = None
@@ -55,6 +60,15 @@ class Drive:
                 d = json.load(f)
             self.desire = float(d.get("desire", self.desire))
             self.bank = float(d.get("bank", BANK))
+            self.bank_min = float(d.get("bank_min", self.bank))
+            self.bank_max = float(d.get("bank_max", max(self.bank, BANK)))
+            for v in self.slots.values():      # opened many times, never spun: a client we cannot drive
+                if v.get("spins", 0) == 0 and v.get("sessions", 0) >= 5:
+                    v["unplayable"] = True
+            self.bank_min_at = d.get("bank_min_at", "")
+            self.bank_max_at = d.get("bank_max_at", "")
+            self.since = d.get("since", self.since)
+            self.spins_total = int(d.get("spins_total", 0))
             self.slots = d.get("slots", {})
         except (OSError, ValueError):
             pass
@@ -67,8 +81,10 @@ class Drive:
     def _save(self):
         os.makedirs(DATA, exist_ok=True)
         with open(self.path, "w", encoding="utf-8") as f:
-            json.dump({"desire": self.desire, "bank": round(self.bank, 2), "slots": self.slots}, f,
-                      ensure_ascii=False, indent=1)
+            json.dump({"desire": self.desire, "bank": round(self.bank, 2), "bank_min": round(self.bank_min, 2),
+                       "bank_max": round(self.bank_max, 2), "bank_min_at": self.bank_min_at,
+                       "bank_max_at": self.bank_max_at, "since": self.since, "spins_total": self.spins_total,
+                       "slots": self.slots}, f, ensure_ascii=False, indent=1)
 
     def _event(self, kind: str, balance: float | None, **extra) -> dict:
         pct = (balance - self.start) / self.start if (balance is not None and self.start) else None
@@ -104,18 +120,25 @@ class Drive:
         s = self.slots.get(self.slot)
         self.bank = max(0.0, round(self.bank - bet + win, 2))
         balance = self.bank
+        now = datetime.now().strftime("%d.%m %H:%M:%S")
+        if self.bank < self.bank_min:
+            self.bank_min, self.bank_min_at = self.bank, now
+        if self.bank > self.bank_max:
+            self.bank_max, self.bank_max_at = self.bank, now
         self.session_spins += 1
+        self.spins_total += 1
         self.session_net += win - bet
         if s:
             s["spins"] += 1
             s["net"] = round(s["net"] + win - bet, 2)
             if win > 0:
                 s["wins"] += 1
-        # desire: wins feed it (dopamine), losses wear it down, it drifts back to neutral
-        if reward > 0:
+        # desire: wins feed it (dopamine), dead spins wear it down, it drifts back to neutral.
+        # The streak counts dead spins (nothing won at all): a small win still keeps the fly hooked.
+        if win > 0:
             self.win_streak += 1
             self.loss_streak = 0
-            self.desire += 0.10 * min(reward, 3.0)
+            self.desire += 0.10 * min(reward, 3.0) if reward > 0 else 0.01
         else:
             self.loss_streak += 1
             self.win_streak = 0
@@ -147,7 +170,8 @@ class Drive:
             elif pct <= BUST_PCT and not self.broke:
                 if s:
                     s["busts"] += 1
-                    s["unlucky"] = True
+                    s["lucky"] = False
+                    self._mark_unlucky(s)
                 events.append(self._event("bust", balance, loss=round(self.start - balance, 2)))
                 self.desire = max(0.0, self.desire - 0.3)
                 self.reason = "слив"
@@ -178,15 +202,36 @@ class Drive:
         """Somebody gave the fly money again (gear menu on localhost)."""
         self.bank = float(amount)
         self.start = self.bank
+        self.bank_min = self.bank_max = self.bank
+        self.bank_min_at = self.bank_max_at = ""
+        self.since = datetime.now().strftime("%d.%m %H:%M")
+        self.spins_total = 0
         self.desire = max(self.desire, 0.6)
         self.reason = ""
         self._event("refill", self.bank)
         self._save()
 
+    @staticmethod
+    def _mark_unlucky(s: dict):
+        s["unlucky"] = True
+        s["unlucky_until"] = time.time() + UNLUCKY_TTL
+
+    @staticmethod
+    def is_unlucky(s: dict | None) -> bool:
+        """Unlucky wears off: after UNLUCKY_TTL the slot is neutral again (else every slot ends up avoided)."""
+        return bool(s and s.get("unlucky") and s.get("unlucky_until", 0) > time.time())
+
+    def mark_unplayable(self, slug: str, name: str):
+        """The slot opened but has no stake strip we can drive: never pick it again."""
+        s = self.slots.setdefault(slug, {"name": name, "spins": 0, "wins": 0, "net": 0.0, "best_pct": 0.0,
+                                         "lucky": False, "unlucky": False, "sessions": 0, "goals": 0, "busts": 0})
+        s["unplayable"] = True
+        self._save()
+
     def close_slot(self, why: str):
         s = self.slots.get(self.slot)
         if s and self.session_net < 0 and not s["lucky"] and self.session_spins >= 3:
-            s["unlucky"] = True
+            self._mark_unlucky(s)
         self._event("switch", None, why=why)
         self.reason = ""
         self.desire = max(self.desire, 0.45)       # a fresh slot restores some appetite
@@ -203,16 +248,21 @@ class Drive:
         out = []
         for slug in slugs:
             s = self.slots.get(slug)
-            out.append(1.2 if (s and s["lucky"]) else -2.0 if (s and s["unlucky"]) else 0.3 if s is None else 0.0)
+            out.append(-9.0 if (s and s.get("unplayable")) else 1.2 if (s and s["lucky"])
+                       else -2.0 if self.is_unlucky(s) else 0.3 if s is None else 0.0)
         return np.array(out, np.float32)
 
     def snapshot(self) -> dict:
         s = self.slots.get(self.slot) or {}
         return {"desire": round(self.desire, 3), "bank": round(self.bank, 2), "broke": self.broke,
+                "bank_min": round(self.bank_min, 2), "bank_max": round(self.bank_max, 2),
+                "bank_min_at": self.bank_min_at, "bank_max_at": self.bank_max_at, "since": self.since,
+                "spins_total": self.spins_total,
                 "slot": self.slot, "name": self.name, "start": self.start,
                 "session_spins": self.session_spins, "session_net": round(self.session_net, 2),
                 "loss_streak": self.loss_streak, "win_streak": self.win_streak,
                 "target_bet": self.target_bet and round(self.target_bet, 2), "lucky": bool(s.get("lucky")),
-                "unlucky": bool(s.get("unlucky")), "reason": self.reason,
+                "unlucky": self.is_unlucky(s), "reason": self.reason,
                 "events": self.events[-12:][::-1],
-                "slots": sorted(({"slug": k, **v} for k, v in self.slots.items()), key=lambda x: -x["spins"])[:12]}
+                "slots": sorted(({"slug": k, **v, "unlucky": self.is_unlucky(v)} for k, v in self.slots.items()
+                                 if not v.get("unplayable")), key=lambda x: -x["spins"])[:12]}

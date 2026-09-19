@@ -273,6 +273,7 @@ class CasinoEnv:
             cards = self.page.evaluate(CARDS_JS)
         except Exception:
             cards = []
+        cards = [c for c in cards if not (self.drive.slots.get(c["slug"]) or {}).get("unplayable")]
         return cards[: self.max_actions]
 
     def _open_lobby(self) -> bool:
@@ -390,24 +391,49 @@ class CasinoEnv:
                            "drive": self.drive.snapshot(), "events": self.new_events}}
 
     def _wait_settle(self, before: tuple) -> tuple[tuple, bool]:
-        """Wait until the (balance, win) fields moved away from `before` and then stayed put for 1.2 s,
-        streaming live frames meanwhile. Returns ((balance, win), won): `won` is True if the win field
-        changed or a win line was shown - the win field keeps the last non-zero win, so a losing spin
-        after a win still displays it."""
+        """Follow one spin to its end, streaming live frames meanwhile. Returns ((balance, win), won).
+
+        Timeline of the Amusnet client (measured): ~0.2 s after the click the balance drops by the stake
+        and #info-line goes blank; the reels stop 2.3-5 s later. A dead spin brings the "place your bet"
+        prompt back; a win shows "Line N 4x = 0.40 FUN" and #win-amount-field counts up from 0 to the
+        total over 1-2 s (it keeps that value through later dead spins, so a change alone is not a win).
+        The win is credited to the balance at the next spin."""
         t0 = time.time()
-        last, last_change, moved, won = before, time.time(), False, False
         frame = self.game_frame()
+        started = saw_blank = False
+        won = False
+        last = before
+        best_win = 0.0
+        stable_since = None
         while time.time() - t0 < self.spin_timeout:
             self.page.wait_for_timeout(120)                      # pumps screencast frames meanwhile
-            cur = self._read()
-            if "=" in (self._dom(frame).get("info") or ""):     # "Лінія 5 4x = 0.40 FUN"
+            d = self._dom(frame)
+            cur = (_num(d.get("balance")), _num(d.get("win")))
+            info = (d.get("info") or "").strip()
+            if not started:
+                if cur[0] is not None and cur != before or (info == "" and time.time() - t0 > 0.1):
+                    started = True                              # the stake was taken / reels are moving
+                elif time.time() - t0 > 3.0:
+                    return before, False                        # the click did not start a spin
+                continue
+            if info == "":                                      # reels still turning
+                saw_blank = True
+                continue
+            if not saw_blank:                                   # still the previous spin's win line
+                continue
+            if "=" in info:
                 won = True
-            if cur != last and cur[0] is not None:
-                if cur[1] != last[1]:
-                    won = True
-                last, last_change, moved = cur, time.time(), True
-            if moved and time.time() - t0 > 2.0 and time.time() - last_change > 1.2:
+            if cur != last:
+                last, stable_since = cur, time.time()
+            elif stable_since is None:
+                stable_since = time.time()
+            if won and cur[1]:
+                best_win = max(best_win, cur[1])
+            # reels stopped: a dead spin settles at once, a win once the odometer has stopped counting
+            if stable_since and time.time() - stable_since > (0.9 if won else 0.3):
                 break
+        if won and best_win:
+            last = (last[0], best_win)
         return last, won
 
     def step(self, action: int) -> tuple[dict, float, bool]:
@@ -418,11 +444,15 @@ class CasinoEnv:
             print(f"casino: opening slot '{card['name']}' in demo mode")
             try:
                 self._open_game(url)
+                if not self._bet_buttons():          # e.g. Gorgon's Luck: Amusnet, FUN, but a canvas-only UI
+                    raise RuntimeError("no stake strip in this client")
                 self._register_slot(url, card["name"])
-            except Exception as e:                   # not an Amusnet client / no FUN currency: fall back
-                print(f"casino: {card['name']} not playable here ({str(e)[:80]}), falling back to the default slot")
-                self._open_game(self.game)
-                self._register_slot(self.game)
+            except Exception as e:                   # not a client we can drive: remember, pick another one
+                print(f"casino: {card['name']} not playable here ({str(e)[:80]}), back to the lobby")
+                self.drive.mark_unplayable(card["slug"], card["name"])
+                if not self._open_lobby():
+                    self._open_game(self.game)
+                    self._register_slot(self.game)
             return self._observe(), 0.0, False
         frame = self.game_frame()
         self._demo_check(frame)
