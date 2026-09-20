@@ -19,10 +19,32 @@ import py_compile
 import signal
 import subprocess
 import sys
+import threading
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WATCH_DIR = os.path.join(ROOT, "fly")
+LOG = os.path.join(ROOT, "data", "fly.log")      # everything the supervisor and the fly print, with times
+LOG_MAX = 8 * 1024 * 1024
+
+
+def say(line: str, echo: bool = True):
+    """Print and append to data/fly.log, so 'did the fly break?' can be answered after the terminal is gone."""
+    line = line.rstrip("\n")
+    if echo:
+        print(line, flush=True)
+    try:
+        os.makedirs(os.path.dirname(LOG), exist_ok=True)
+        if os.path.exists(LOG) and os.path.getsize(LOG) > LOG_MAX:      # keep the tail, drop the rest
+            with open(LOG, "rb") as f:
+                f.seek(-LOG_MAX // 4, 2)
+                tail = f.read()
+            with open(LOG, "wb") as f:
+                f.write(tail)
+        with open(LOG, "a", encoding="utf-8", errors="replace") as f:
+            f.write(time.strftime("%d.%m %H:%M:%S ") + line + "\n")
+    except OSError:
+        pass
 SUPERVISOR_ONLY = {"--tunnel", "--public", "--port", "--episodes"}
 
 
@@ -169,15 +191,23 @@ class Worker:
 
     def start(self):
         cmd = [sys.executable, "-u", "-m", "fly.run", *self.args]
-        print("serve: starting  " + " ".join(cmd[2:]))
+        say("serve: starting  " + " ".join(cmd[2:]))
         flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
-        self.proc = subprocess.Popen(cmd, cwd=ROOT, env=self.env, creationflags=flags)
+        self.proc = subprocess.Popen(cmd, cwd=ROOT, env=self.env, creationflags=flags,
+                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         self.started = time.time()
+        threading.Thread(target=self._pump, args=(self.proc,), daemon=True).start()
+
+    @staticmethod
+    def _pump(proc):
+        with proc.stdout:
+            for raw in iter(proc.stdout.readline, b""):
+                say(raw.decode("utf-8", "replace"))
 
     def stop(self, grace: float = 20.0):
         if not self.proc or self.proc.poll() is not None:
             return
-        print("serve: stopping the fly (closing browser, saving readout) ...")
+        say("serve: stopping the fly (closing browser, saving readout) ...")
         try:
             if os.name == "nt":
                 self.proc.send_signal(signal.CTRL_BREAK_EVENT)     # -> KeyboardInterrupt in fly.run
@@ -196,6 +226,7 @@ class Worker:
 def main():
     mine, rest = split_args(sys.argv[1:])
     port = int(mine.get("port", 8765))
+    say(f"serve: supervisor started (pid {os.getpid()}) " + " ".join(sys.argv[1:]))
     bind_children_to_me()
     free_port(port)
     if "--viz" not in rest:
@@ -209,11 +240,11 @@ def main():
     if mine.get("tunnel"):
         from .tunnel import open_tunnel
         try:
-            tunnel = open_tunnel(port, mine["tunnel"], on_url=lambda u: print(f"serve: public link -> {u}"))
+            tunnel = open_tunnel(port, mine["tunnel"], on_url=lambda u: say(f"serve: public link -> {u}"))
             env["FLY_TUNNEL_URL"] = tunnel.url
-            print(f"serve: tunnel ON ({tunnel.provider}) -> {tunnel.url}  (stays the same across restarts)")
+            say(f"serve: tunnel ON ({tunnel.provider}) -> {tunnel.url}  (stays the same across restarts)")
         except Exception as e:
-            print(f"serve: tunnel failed: {e}")
+            say(f"serve: tunnel failed: {e}")
             tunnel = None
 
     worker = Worker(worker_args, env)
@@ -235,20 +266,20 @@ def main():
                 files = list(pending)
                 pending.clear()
                 if compiles(files):
-                    print("serve: code changed (" + ", ".join(os.path.basename(p) for p in files) + ") -> restart")
+                    say("serve: code changed (" + ", ".join(os.path.basename(p) for p in files) + ") -> restart")
                     worker.stop()
                     worker.start()
                     crashes = 0
             if not worker.alive:
                 code = worker.proc.returncode
                 if code == 0:
-                    print("serve: the fly finished its episodes, starting again")
+                    say("serve: the fly finished its episodes, starting again")
                     worker.start()
                 else:
                     crashes += 1
                     wait = min(60, 5 * crashes)
-                    print(f"serve: the fly crashed (exit {code}), restart in {wait}s "
-                          f"(fix the code - a good save restarts it immediately)")
+                    say(f"serve: the fly crashed (exit {code}), restart in {wait}s "
+                        f"(fix the code - a good save restarts it immediately)")
                     t0 = time.time()
                     while time.time() - t0 < wait:
                         time.sleep(1)
@@ -258,11 +289,12 @@ def main():
                     seen = snapshot()
                     worker.start()
     except KeyboardInterrupt:
-        print("serve: shutting down")
+        say("serve: shutting down")
     finally:
         worker.stop()
         if tunnel:
             tunnel.stop()
+        say("serve: supervisor exited")
 
 
 if __name__ == "__main__":
