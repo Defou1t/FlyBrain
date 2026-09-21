@@ -97,8 +97,11 @@ switches to Ukrainian.
   harder glow as a whole; the footer names the strongest regions. Drag to rotate. Activity arrives as a
   spike bitmask 10–20× per second and the shader interpolates between frames, so the cloud breathes
   smoothly at any display rate (120 fps on a 120 Hz screen).
-* **Drosophila** — the 3-D fly (NeuroMechFly v2, EPFL flygym, Apache-2.0): hinged wings with motion
-  ghosts, legs that tuck in flight, spring-based steering. It flies to the element it decided on and
+* **Drosophila** — the 3-D fly: **flybody** (TuragaLab / Google DeepMind, Apache-2.0; segmented legs and
+  abdomen, antennae, proboscis, wing veins, thorax bristles), built from the MJCF + OBJ meshes by
+  `tools/build_flybody.py` (welded, decimated to ~130k triangles, per-part shade as vertex colour);
+  `?model=nmf` switches to the older NeuroMechFly build. Skins in the site's palette (`gold` default,
+  `?skin=cream|snow|pearl`). Hinged wings with motion ghosts, legs that tuck in flight, spring-based steering. It flies to the element it decided on and
   lands exactly on it; when broke it sits down and smokes until somebody gives it money. Click it for
   the gear menu.
 * **The fly's browser** — a browser window with the live video of the fly's Chromium as motion-JPEG
@@ -196,7 +199,10 @@ terminal was closed or the process killed).
 * the fly's Chromium runs in the *new* headless mode of the full browser (`channel="chromium"`),
   which renders with the GPU: the slot clients run at the display rate (~120 fps on an RTX 5080)
   instead of SwiftShader's ~24; the CDP screencast follows;
-* the live view is motion-JPEG (`/stream.mjpg`): the `<img>` decodes natively, no JSON, no base64;
+* the live view is motion-JPEG (`/stream.mjpg`): the `<img>` decodes natively, no JSON, no base64. The
+  screencast runs on a second CDP connection in its own thread, so its frame acks never wait for the
+  brain: ~100 frames/s from the fly's browser, paced to 60 for local viewers;
+* shadows in the arcade: one 1024² map from the spot above the cabinet (~0.1 ms on an RTX; off in lite mode);
 * the brain keeps running while the environment waits (the reels spin for seconds) — it looks at the
   live frames, so the activity is continuous rather than a burst at each decision;
 * the point cloud is shaded on the GPU (two Uint8 activity attributes, interpolated in the vertex

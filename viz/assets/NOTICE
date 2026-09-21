@@ -8,3 +8,5 @@ Nodes: thorax, body, eyes, lWing, rWing, legs (81k triangles, vertex normals, no
 three.min.js / GLTFLoader.js - three.js r128, MIT.
 
 betking-logo.svg - the BETKING logo (betking.com.ua, /uploads/logo-project/LogoBigNew2026.svg), trademark of its owner; used only to label the arcade marquee of this demo, which plays on that site.
+
+drosophila-flybody.glb - built by tools/build_flybody.py from flybody (TuragaLab / Google DeepMind, https://github.com/TuragaLab/flybody, Apache-2.0): the MJCF body tree and OBJ meshes of the fruit fly model, welded, decimated to ~130k triangles, grouped into thorax / body / eyes / wings / legs with per-part shade as vertex colour.

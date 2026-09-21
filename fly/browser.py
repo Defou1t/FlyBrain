@@ -23,12 +23,70 @@ def launch_chromium(pw, headless: bool = True):
     "chromium"), which renders with the real GPU: the slot clients then run at the display rate
     (~120 fps on an RTX) instead of SwiftShader's ~24 fps, and the screencast follows. Falls back to the
     classic headless shell when that channel is not installed (playwright install chromium adds both)."""
+    import socket
+    with socket.socket() as sk:                      # a CDP port of our own: the screencast thread connects to it
+        sk.bind(("127.0.0.1", 0))
+        port = sk.getsockname()[1]
+    args = [f"--remote-debugging-port={port}"]
     if headless:
         try:
-            return pw.chromium.launch(headless=True, channel="chromium")
+            b = pw.chromium.launch(headless=True, channel="chromium", args=args)
+            b._fly_cdp_port = port
+            return b
         except Exception as e:
             print(f"browser: new headless mode unavailable ({str(e)[:60]}), using the headless shell")
-    return pw.chromium.launch(headless=headless)
+    b = pw.chromium.launch(headless=headless, args=args)
+    b._fly_cdp_port = port
+    return b
+
+
+class ScreencastThread:
+    """The live video on its own Playwright connection, in its own thread. On the fly's main
+    connection frames only arrive while that thread sits inside a Playwright call, and it spends
+    most of its time in numpy (the brain) - the reels looked like 15-20 fps. Here the acks flow
+    freely: the stream runs at whatever the page repaints (60-120 fps)."""
+
+    def __init__(self, cdp_port: int, page_url: str, on_frame, max_width: int, max_height: int, quality: int):
+        import threading
+        self.port, self.url, self.on_frame = cdp_port, page_url, on_frame
+        self.max_width, self.max_height, self.quality = max_width, max_height, quality
+        self.alive = True
+        self.ok = threading.Event()
+        self.failed = None
+        threading.Thread(target=self._run, daemon=True, name="screencast").start()
+
+    def _run(self):
+        import base64
+        from playwright.sync_api import sync_playwright
+        try:
+            with sync_playwright() as pw:
+                browser = pw.chromium.connect_over_cdp(f"http://127.0.0.1:{self.port}", timeout=15000)
+                pages = [pg for ctx in browser.contexts for pg in ctx.pages]
+                page = next((pg for pg in pages if pg.url == self.url), None) or (pages[-1] if pages else None)
+                if page is None:
+                    raise RuntimeError("no page on the CDP connection")
+                cdp = page.context.new_cdp_session(page)
+
+                def on(params):
+                    try:
+                        self.on_frame(base64.b64decode(params["data"]))
+                    finally:
+                        try:
+                            cdp.send("Page.screencastFrameAck", {"sessionId": params["sessionId"]})
+                        except Exception:
+                            pass
+                cdp.on("Page.screencastFrame", on)
+                cdp.send("Page.startScreencast", {"format": "jpeg", "quality": self.quality, "maxWidth": self.max_width,
+                                                  "maxHeight": self.max_height, "everyNthFrame": 1})
+                self.ok.set()
+                while self.alive:
+                    page.wait_for_timeout(250)
+        except Exception as e:
+            self.failed = e
+            self.ok.set()
+
+    def stop(self):
+        self.alive = False
 
 
 def start_screencast(context, page, on_frame, max_width: int = 800, max_height: int = 500, quality: int = 40):
@@ -36,6 +94,13 @@ def start_screencast(context, page, on_frame, max_width: int = 800, max_height: 
     reels spin at the page's frame rate instead of one screenshot per decision). Frames are delivered
     while the main thread is inside Playwright calls (wait_for_timeout etc.)."""
     import base64
+    port = getattr(context.browser, "_fly_cdp_port", None)
+    if port:
+        t = ScreencastThread(port, page.url, on_frame, max_width, max_height, quality)
+        t.ok.wait(20)
+        if not t.failed:
+            return t
+        print(f"browser: screencast thread failed ({str(t.failed)[:80]}), streaming on the main connection")
     cdp = context.new_cdp_session(page)
 
     def on(params):
