@@ -853,7 +853,13 @@ class CasinoEnv:
 
     def _step_generic(self, action: int) -> tuple[dict, float, bool]:
         """Unknown client: do the action, watch the wire for a balance drop (stake) and a win."""
-        self._demo_check(None)
+        try:
+            self._demo_check(None)
+        except RuntimeError as e:                   # the guard is a reason to leave the game, not to crash the fly
+            print(f"casino: leaving '{self.cur_name}': {e}")
+            self._note_explored(4)
+            self.drive.reason = "unplayable"
+            return self._observe(), 0.0, True
         before = self.sniffer.snapshot()
         self.generic.act(action)
         t0 = time.time()

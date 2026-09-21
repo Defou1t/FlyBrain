@@ -94,6 +94,8 @@ class NetSniffer:
     def _marks(self, url: str):
         with self.lock:
             self.hosts[urlparse(url).netloc] = self.hosts.get(urlparse(url).netloc, 0) + 1
+            if self.site and urlparse(url).netloc.endswith(self.site):
+                return                            # the site's own API talks about deposits etc.: not the game's mode
             if REAL_MARK.search(url):
                 self.real_evidence += 1
             elif DEMO_MARK.search(url):

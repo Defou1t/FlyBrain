@@ -638,12 +638,12 @@ const envMap = (() => {
 // no wasp gloss. Patterns are procedural (the model has no UVs): stripes by position, fur as shells.
 const MAT = {
   // DoubleSide: the model's body plates have small gaps between segments; without back faces they showed the background through the fly
-  thorax: new THREE.MeshPhysicalMaterial({ color: 0xb08a5e, roughness: 0.62, metalness: 0.0, clearcoat: 0.25, clearcoatRoughness: 0.5, sheen: new THREE.Color(0x3a2a18), envMap, envMapIntensity: 0.35, side: THREE.DoubleSide }),
-  body:   new THREE.MeshPhysicalMaterial({ color: 0xcaa574, roughness: 0.6, metalness: 0.0, clearcoat: 0.3, clearcoatRoughness: 0.45, sheen: new THREE.Color(0x3a2a18), envMap, envMapIntensity: 0.35, side: THREE.DoubleSide }),
-  eyes:   new THREE.MeshPhysicalMaterial({ color: 0xd8232e, emissive: 0x3a080b, roughness: 0.18, metalness: 0.0, clearcoat: 1.0, clearcoatRoughness: 0.08, envMap, envMapIntensity: 1.2 }),
+  thorax: new THREE.MeshPhysicalMaterial({ color: 0xece2d4, roughness: 0.55, metalness: 0.0, clearcoat: 0.3, clearcoatRoughness: 0.45, sheen: new THREE.Color(0x6a5a4a), envMap, envMapIntensity: 0.4, side: THREE.DoubleSide }),
+  body:   new THREE.MeshPhysicalMaterial({ color: 0xf4ece2, roughness: 0.5, metalness: 0.0, clearcoat: 0.35, clearcoatRoughness: 0.4, sheen: new THREE.Color(0x6a5a4a), envMap, envMapIntensity: 0.4, side: THREE.DoubleSide }),
+  eyes:   new THREE.MeshPhysicalMaterial({ color: 0xe0262f, emissive: 0x3a080b, roughness: 0.15, metalness: 0.0, clearcoat: 1.0, clearcoatRoughness: 0.06, envMap, envMapIntensity: 1.3 }),
   wing:   new THREE.MeshPhysicalMaterial({ color: 0xe6f4ff, transparent: true, opacity: 0.34, roughness: 0.1, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false, envMap, envMapIntensity: 1.3 }),
   wingGhost: new THREE.MeshBasicMaterial({ color: 0xdfeeff, transparent: true, opacity: 0.09, side: THREE.DoubleSide, depthWrite: false }),
-  legs:   new THREE.MeshStandardMaterial({ color: 0x2f2318, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide }),
+  legs:   new THREE.MeshStandardMaterial({ color: 0x8d7a66, roughness: 0.85, metalness: 0.0, side: THREE.DoubleSide }),
 };
 // stripes: dark bands along the body axis behind z0 (the abdomen), thin faint ones on the thorax
 function stripe(mat, z0, freq, dark, spread, hairFreq, fuzz = 0xd8bd95) {
@@ -652,7 +652,7 @@ function stripe(mat, z0, freq, dark, spread, hairFreq, fuzz = 0xd8bd95) {
   // with see-through seams on this low-poly model.
   mat.onBeforeCompile = sh => {
     sh.uniforms.uZ0 = { value: z0 }; sh.uniforms.uFreq = { value: freq }; sh.uniforms.uDark = { value: dark }; sh.uniforms.uSpread = { value: spread };
-    sh.uniforms.uHairFreq = { value: hairFreq }; sh.uniforms.uFuzz = { value: new THREE.Color(fuzz) };
+    sh.uniforms.uHairFreq = { value: hairFreq }; sh.uniforms.uFuzz = { value: new THREE.Color(fuzz) }; mat.userData.shader = sh;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vObjPos;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvObjPos = position;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vObjPos; uniform float uZ0, uFreq, uDark, uSpread, uHairFreq; uniform vec3 uFuzz;')
       .replace('#include <color_fragment>', '#include <color_fragment>\n{ float rear = smoothstep(0.0, uSpread, uZ0 - vObjPos.z); float band = smoothstep(0.1, 0.6, sin((vObjPos.z - uZ0) * uFreq));'
@@ -674,6 +674,17 @@ function smoothGeometry(g) {
   const idx = g.index ? Array.from(g.index.array, i => index[i]) : Array.from(index);
   const ng = new THREE.BufferGeometry(); ng.setAttribute('position', new THREE.Float32BufferAttribute(out, 3)); ng.setIndex(idx); ng.computeVertexNormals(); return ng;
 }
+const SKINS = {
+  cream: { thorax: 0xece2d4, body: 0xf4ece2, legs: 0x8d7a66, fuzz: 0xfff4e6, stripes: 0.8, eyes: 0xe0262f },
+  snow:  { thorax: 0xf2eaea, body: 0xfaf3f0, legs: 0x9a8c86, fuzz: 0xffe4e4, stripes: 0.88, eyes: 0xe8303a },
+  pearl: { thorax: 0xe6e9ee, body: 0xf3f5f8, legs: 0x8a8f99, fuzz: 0xffffff, stripes: 0.85, eyes: 0xd9262e },
+};
+let skinName = 'cream'; try { skinName = new URLSearchParams(location.search).get('skin') || localStorage.getItem('fly.skin') || 'cream'; } catch (e) {}
+function applySkin(name) {
+  const k = SKINS[name] || SKINS.cream; skinName = name; try { localStorage.setItem('fly.skin', name); } catch (e) {}
+  MAT.thorax.color.set(k.thorax); MAT.body.color.set(k.body); MAT.legs.color.set(k.legs); MAT.eyes.color.set(k.eyes);
+  for (const m of [MAT.thorax, MAT.body, MAT.legs]) if (m.userData.shader) { m.userData.shader.uniforms.uFuzz.value.set(k.fuzz); if (m !== MAT.legs) m.userData.shader.uniforms.uDark.value = k.stripes; }
+}
 new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
   const model = gltf.scene; let legsMesh = null, bodyMesh = null;
   model.traverse(o => { if (!o.isMesh) return; const n = o.name.toLowerCase(); if (!n.includes('wing')) o.geometry = smoothGeometry(o.geometry);
@@ -684,10 +695,11 @@ new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
   if (thorax) new THREE.Box3().setFromObject(thorax).getCenter(tc);
   const bbAll = new THREE.Box3().setFromObject(model), L = bbAll.max.z - bbAll.min.z;
   // abdomen bands behind the thorax, faint thorax stripes, fur on both
-  stripe(MAT.body, tc.z - L * 0.06, 2 * Math.PI * 4.5 / Math.max(0.01, tc.z - bbAll.min.z), 0.55, L * 0.12, 260 / L);
+  stripe(MAT.body, tc.z - L * 0.06, 2 * Math.PI * 4.5 / Math.max(0.01, tc.z - bbAll.min.z), 0.8, L * 0.12, 260 / L, 0xfff4e6);
   fly.rear = tc.z - bbAll.min.z; fly.front = bbAll.max.z - tc.z;   // model units behind / in front of the thorax (for the perch)
-  stripe(MAT.thorax, tc.z + L * 0.4, 2 * Math.PI * 3.0 / (L * 0.3), 0.72, L * 0.6, 220 / L);
-  stripe(MAT.legs, tc.z, 1.0, 1.0, 0.0, 400 / L, 0x6a5238);
+  stripe(MAT.thorax, tc.z + L * 0.4, 2 * Math.PI * 3.0 / (L * 0.3), 0.9, L * 0.6, 220 / L, 0xfff4e6);
+  stripe(MAT.legs, tc.z, 1.0, 1.0, 0.0, 400 / L, 0xbfb0a4);
+  applySkin(skinName);
 
   fly.wings = fly.wings.map(({ mesh, s }) => {
     const bb = new THREE.Box3().setFromObject(mesh);
@@ -713,7 +725,7 @@ new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
   model.position.sub(tc);                    // origin = thorax, so the body sits exactly on the landing point
   model.traverse(o => { if (o.isMesh && o.material && o.material.transparent) o.renderOrder = 20; });   // wings, fur: after the brain cloud, so they blend over it, never under
   fly.len = Math.max(size.x, size.y, size.z); fly.model = model; flyRoot.add(model); fly.ready = true;
-  if (view === 'arcade') flyRoot.scale.setScalar(0.6 / fly.len); else layout();
+  if (view === 'arcade') flyRoot.scale.setScalar(0.5 / fly.len); else layout();
 }, undefined, err => { console.warn('drosophila.glb failed', err); const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), MAT.body); m.scale.set(1, 0.8, 1.6); flyRoot.add(m); fly.len = 3.2; fly.ready = true; layout(); });
 
 // smoke: a small pool of soft sprites rising from the ember
@@ -872,7 +884,7 @@ function setView(v) {
     scene.remove(flyRoot); scene.remove(brainGroup); scene.remove(smokePts); arcade.add(flyRoot); arcade.add(brainGroup); arcade.add(brainLight); arcade.add(smokePts);
     brainGroup.position.set(0, 2.42, 0.0); brainGroup.scale.setScalar(0.58); brainGroup.position.y -= brainTop * 0.62;
     if (brainMat) { brainMat.uniforms.uCamZ.value = haloMat.uniforms.uCamZ.value = 2.6; brainMat.uniforms.uSize.value = haloMat.uniforms.uSize.value = 2.6; brainMat.uniforms.uHideBelow.value = haloMat.uniforms.uHideBelow.value = NECK; }
-    if (fly.ready) flyRoot.scale.setScalar(0.6 / fly.len);
+    if (fly.ready) flyRoot.scale.setScalar(0.5 / fly.len);
     flyState.mode = 'perch';
   } else {
     arcade.remove(flyRoot); arcade.remove(brainGroup); arcade.remove(brainLight); arcade.remove(smokePts); scene.add(flyRoot); scene.add(brainGroup); scene.add(smokePts);
@@ -1146,7 +1158,8 @@ function animate(now) {
   } else if (fs.mode === 'perch') {   // arcade: sits on the cabinet's ledge, facing the screen, watching the reels
     grounded = true;
     const pr = cabinet.userData.perch, sc = flyRoot.scale.x, rear = (fly.rear || 0) * sc;
-    fs.pos.set(-0.04, pr.y + 0.085, pr.front - 0.04 - rear);       // the abdomen ends inside the ledge, never over the edge flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t0 * 1.7) * 0.004;
+    fs.pos.set(-0.04, pr.y + 0.085, pr.front - 0.04 - rear);       // the abdomen ends inside the ledge, never over the edge
+    flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t0 * 1.7) * 0.004;
     tmp.set(fs.pos.x - 0.02, fs.pos.y + 0.02 + Math.sin(t0 * 0.6) * 0.02, fs.pos.z - 0.8); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp); flyRoot.rotateX(0.12 + Math.sin(t0 * 0.9) * 0.03); flyRoot.rotateY(Math.sin(t0 * 0.35) * 0.12);
     qA.copy(flyRoot.quaternion); flyRoot.quaternion.copy(qTarget).slerp(qA, Math.min(1, dt * 4));
     if (flyCtl.broke) smoking = true;
