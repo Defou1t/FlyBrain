@@ -269,7 +269,8 @@ class Drive:
         for slug in slugs:
             s = self.slots.get(slug)
             out.append(-9.0 if (s and s.get("unplayable")) else 1.2 if (s and s["lucky"])
-                       else -2.0 if self.is_unlucky(s) else 0.3 if s is None else 0.0)
+                       else -2.0 if self.is_unlucky(s) else 0.3 if s is None
+                       else -0.15 * s.get("explored", 0) if s.get("spins", 0) == 0 else 0.0)   # poked at, never paid
         return np.array(out, np.float32)
 
     def snapshot(self) -> dict:

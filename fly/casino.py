@@ -376,6 +376,8 @@ class CasinoEnv:
         self.phase = "game"
         snap = self.sniffer.snapshot()
         self.balance = snap["balance"]
+        if snap["balance"] is None:
+            self.explored += 4                       # not even a balance on the wire: little hope, fewer tries
         self.win, self.bet, self.delta = 0.0, None, 0.0
 
     # ---- gym-like api -------------------------------------------------------------------------
@@ -559,6 +561,8 @@ class CasinoEnv:
             try:
                 self._open_game(url)
                 self._register_slot(url, card["name"])
+                if self.kind == "generic":
+                    self._note_explored(self.explored)
             except Exception as e:                   # not a client we can drive: remember, pick another one
                 print(f"casino: {card['name']} not playable here ({str(e)[:80]}), back to the lobby")
                 self.drive.mark_unplayable(card["slug"], card["name"])
@@ -621,6 +625,16 @@ class CasinoEnv:
         done = self.step_i >= self.max_steps or broke or switch or self.rest
         return obs, reward, done
 
+    def _note_explored(self, n: int):
+        """Exploration is remembered per slot across sessions: a game that never shows money is dropped."""
+        st = self.drive.slots.get(self.cur_slug)
+        if st is not None:
+            st["explored"] = st.get("explored", 0) + n
+
+    def _explored_total(self) -> int:
+        st = self.drive.slots.get(self.cur_slug) or {}
+        return max(self.explored, int(st.get("explored", 0)))
+
     def _step_generic(self, action: int) -> tuple[dict, float, bool]:
         """Unknown client: do the action, watch the wire for a balance drop (stake) and a win."""
         self._demo_check(None)
@@ -640,6 +654,7 @@ class CasinoEnv:
         self.balance = snap["balance"]
         if stake is None and win is None:
             self.explored += 1
+            self._note_explored(1)
             self.bet, self.win, self.delta = None, 0.0, 0.0
             reward = 0.0
         else:
@@ -657,8 +672,8 @@ class CasinoEnv:
                                         f"{self.drive.desire:.3f}"])
             self.new_events = self.drive.spin(self.bet, self.win, reward, None)
         obs = self._observe()
-        if self.explored >= EXPLORE_LIMIT:
-            print(f"casino: '{self.cur_name}' shows no money signal after {self.explored} actions - giving up on it")
+        if self._explored_total() >= EXPLORE_LIMIT:
+            print(f"casino: '{self.cur_name}' shows no money signal after {self._explored_total()} actions - giving up on it")
             self.drive.mark_unplayable(self.cur_slug, self.cur_name)
             self.drive.reason = "unplayable"
             return obs, 0.0, True
