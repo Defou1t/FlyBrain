@@ -34,7 +34,8 @@ from .generic import GenericGame, NetSniffer, money_delta, summarize
 
 DEMO_GAME = "https://betking.com.ua/casino/?game=olympus-glory-buy-bonus&isMoney=false"
 LOBBY = "https://betking.com.ua/casino/"                              # every provider; the fly picks any card
-LOBBIES = [LOBBY, "https://betking.com.ua/games/top-provider-games-amusnet/", "https://betking.com.ua/games/all-slots/"]
+AMUSNET = "https://betking.com.ua/games/top-provider-games-amusnet/"
+LOBBIES = [AMUSNET, LOBBY, AMUSNET, "https://betking.com.ua/games/all-slots/"]   # the clients we drive best, twice as often
 EXPLORE_LIMIT = 12    # generic client: this many actions without any money signal -> unplayable
 BONUS_CAP = 150.0     # a free-spins bonus keeps the fields moving; never wait longer than this for one spin
 BOUGHT_CAP = 420.0    # a bought bonus (10 free spins + intro + count-up) takes ~100 s; hard cap
@@ -633,7 +634,7 @@ class CasinoEnv:
             except Exception:
                 title = ""
             return {"png": self.last_png, "mask": mask, "url": self.page.url, "links": self.links,
-                    "boxes": self.boxes, "title": title, "session": self.session,
+                    "boxes": self.boxes, "title": title, "session": self.session, "ghost": True,
                     "casino": {"balance": self.drive.bank, "demo": self.balance, "bet": self.bet, "win": self.win,
                                "delta": self.delta, "cum": self.cum_reward, "phase": "game", "kind": "generic",
                                "drive": self.drive.snapshot(), "events": self.new_events}}
@@ -742,9 +743,9 @@ class CasinoEnv:
                 self._register_slot(url, card["name"])
                 if self.kind == "generic":
                     self._note_explored(self.explored)
-            except Exception as e:                   # not a client we can drive: remember, pick another one
-                print(f"casino: {card['name']} not playable here ({str(e)[:80]}), back to the lobby")
-                self.drive.mark_unplayable(card["slug"], card["name"])
+            except Exception as e:                   # could not open it: remember; three failures = unplayable
+                print(f"casino: {card['name']} did not open ({str(e)[:80]}), back to the lobby")
+                self.drive.note_open_failure(card["slug"], card["name"])
                 if not self._open_lobby():
                     self._open_game(self.game)
                     self._register_slot(self.game)

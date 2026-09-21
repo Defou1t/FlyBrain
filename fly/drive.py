@@ -67,15 +67,17 @@ class Drive:
             self.bank = float(d.get("bank", BANK))
             self.bank_min = float(d.get("bank_min", self.bank))
             self.bank_max = float(d.get("bank_max", max(self.bank, BANK)))
-            for v in self.slots.values():      # opened many times, never spun: a client we cannot drive
-                if v.get("spins", 0) == 0 and v.get("sessions", 0) >= 5:
-                    v["unplayable"] = True
             self.bank_min_at = d.get("bank_min_at", "")
             self.bank_max_at = d.get("bank_max_at", "")
             self.since = d.get("since", self.since)
             self.since_ts = float(d.get("since_ts", 0.0))
             self.spins_total = int(d.get("spins_total", 0))
             self.slots = d.get("slots", {})
+            for v in self.slots.values():      # opened many times, never spun: a client we cannot drive
+                if v.get("spins", 0) == 0 and v.get("sessions", 0) >= 5 and v.get("explored", 0) == 0 and not v.get("open_failures"):
+                    v["unplayable"] = True
+                if v.get("spins", 0) > 0 and v.get("unplayable"):     # it paid before: a failed open is not a verdict
+                    v["unplayable"] = False
         except (OSError, ValueError):
             pass
         try:
@@ -257,6 +259,16 @@ class Drive:
         """Unlucky wears off: after UNLUCKY_TTL the slot is neutral again (else every slot ends up avoided)."""
         return bool(s and s.get("unlucky") and s.get("unlucky_until", 0) > time.time())
 
+    def note_open_failure(self, slug: str, name: str):
+        """The game did not open (timeout, modal, no game area): after three such failures - and only
+        for a slot that never paid out - it is dropped. A slot that was played before is never dropped."""
+        s = self.slots.setdefault(slug, {"name": name, "spins": 0, "wins": 0, "net": 0.0, "best_pct": 0.0,
+                                         "lucky": False, "unlucky": False, "sessions": 0, "goals": 0, "busts": 0})
+        s["open_failures"] = s.get("open_failures", 0) + 1
+        if s["open_failures"] >= 3 and s.get("spins", 0) == 0:
+            s["unplayable"] = True
+        self._save()
+
     def mark_unplayable(self, slug: str, name: str):
         """The slot opened but has no stake strip we can drive: never pick it again."""
         s = self.slots.setdefault(slug, {"name": name, "spins": 0, "wins": 0, "net": 0.0, "best_pct": 0.0,
@@ -301,8 +313,9 @@ class Drive:
         for slug in slugs:
             s = self.slots.get(slug)
             out.append(-9.0 if (s and s.get("unplayable")) else 1.2 if (s and s["lucky"])
-                       else -2.0 if self.is_unlucky(s) else 0.3 if s is None
-                       else -0.15 * s.get("explored", 0) if s.get("spins", 0) == 0 else 0.0)   # poked at, never paid
+                       else -2.0 if self.is_unlucky(s) else 0.1 if s is None
+                       else -0.4 * s.get("explored", 0) if s.get("spins", 0) == 0     # poked at, never paid
+                       else 0.8 if s.get("spins", 0) >= 5 else 0.3)                    # known to work
         return np.array(out, np.float32)
 
     def snapshot(self) -> dict:

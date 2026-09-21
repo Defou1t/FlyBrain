@@ -876,7 +876,7 @@ function updateHud(c) {
 
 // ================================================================== browser card: live MJPEG + overlay
 const overlay = $('overlay'), octx = overlay.getContext('2d');
-let links = [], chosen = -1, ripple = null, k = 1, lastDecisionAt = -1e9;
+let links = [], chosen = -1, ripple = null, k = 1, lastDecisionAt = -1e9, ghostGrid = false;
 const live = $('live'), shot = $('shot');
 let liveOk = false;
 live.onload = () => { liveOk = true; live.style.display = 'block'; };          // first frame of the stream decoded
@@ -898,6 +898,7 @@ function fitOverlay() {
 function boxCenter(box) { const [x, y, w, h] = box; if (w <= 0 || h <= 0) return [PX_W / 2, 36]; return [clamp(x + w / 2, 8, PX_W - 8), clamp(y + h / 2, 8, PX_H - 8)]; }
 function drawOverlay() {
   octx.clearRect(0, 0, overlay.width, overlay.height);
+  if (ghostGrid) return;   // an unknown game's tap grid is the fly's business, not the viewer's
   links.forEach((l, i) => { const [x, y, w, h] = l.box; if (w <= 0 || h <= 0) return;
     octx.strokeStyle = i === chosen ? '#ffb347' : 'rgba(87,214,255,0.45)'; octx.lineWidth = i === chosen ? 3 : 1; octx.strokeRect((x - 2) * k, (y - 2) * k, (w + 4) * k, (h + 4) * k);
     if (i === chosen) { octx.fillStyle = 'rgba(255,179,71,0.18)'; octx.fillRect(x * k, y * k, w * k, h * k); } });
@@ -906,7 +907,7 @@ function drawOverlay() {
     else ripple = null; }
 }
 function linkScreen(box) { const r = overlay.getBoundingClientRect(), [cx, cy] = boxCenter(box); return [r.left + cx * k, r.top + cy * k]; }   // viewport px
-function showTip(i) { const tip = $('tip'); if (i < 0 || !links[i]) { tip.style.display = 'none'; return; } const [cx, cy] = boxCenter(links[i].box); tip.textContent = (links[i].text || links[i].url.replace(/^https?:\/\/[^/]+/, '')) + '  ' + t('click'); tip.style.left = cx * k + 'px'; tip.style.top = cy * k + 'px'; tip.style.display = 'block'; }
+function showTip(i) { const tip = $('tip'); if (i < 0 || !links[i] || ghostGrid) { tip.style.display = 'none'; return; } const [cx, cy] = boxCenter(links[i].box); tip.textContent = (links[i].text || links[i].url.replace(/^https?:\/\/[^/]+/, '')) + '  ' + t('click'); tip.style.left = cx * k + 'px'; tip.style.top = cy * k + 'px'; tip.style.display = 'block'; }
 
 // ================================================================== stats cards
 const rateHist = [], rewardMarks = [], dopa = [];
@@ -1021,7 +1022,7 @@ es.onmessage = ev => {
     $('s-rate').textContent = (frac / Math.max(1, N) * 100).toFixed(1) + '%';
     drawTrace(); drawRaster(actBytes); updateGroups();
   } else if (m.t === 'page') {
-    links = m.links; chosen = -1; showTip(-1);
+    links = m.links; ghostGrid = !!m.ghost; chosen = -1; showTip(-1);
     if (!liveOk) shot.src = m.jpg ? 'data:image/jpeg;base64,' + m.jpg : 'data:image/png;base64,' + m.png;
     const short = m.url.replace(/^https?:\/\//, ''); $('url').textContent = short; $('tabtitle').textContent = m.title || short;
     try { const u = new URL(m.url); $('fav').src = u.origin + '/favicon.ico'; } catch (e) {}

@@ -448,6 +448,7 @@ class VizServer:
         self.send({"t": "page", "step": step, "episode": episode, "url": obs["url"], "title": obs.get("title", ""),
                    "session": bool(obs.get("session")), "casino": obs.get("casino"),
                    "jpg": base64.b64encode(to_jpeg(obs["png"])).decode(),
+                   "ghost": bool(obs.get("ghost")),      # generic tap grid: the fly sees it, viewers do not
                    "links": [{"url": u, "text": t, "box": b} for (u, t), b in zip(obs["links"], obs["boxes"])]})
 
     def frame(self, jpg: bytes):
