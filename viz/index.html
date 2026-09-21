@@ -110,7 +110,7 @@
   #drive .muted { font-size:11px; color:var(--dim); margin:4px 0; }
   #events { font-family:Consolas, monospace; font-size:10.5px; margin:4px 0; }
   #events div { padding:1px 0; color:var(--dim); }
-  #events .goal { color:var(--ok); } #events .lucky { color:var(--gold); } #events .bust, #events .broke { color:var(--bad); } #events .switch { color:var(--cyan); } #events .refill { color:var(--ok); }
+  #events .goal { color:var(--ok); } #events .bonus { color:#c9a3ff; } #events .lucky { color:var(--gold); } #events .bust, #events .broke { color:var(--bad); } #events .switch { color:var(--cyan); } #events .refill { color:var(--ok); }
   #slots { display:grid; grid-template-columns:1fr auto auto auto; gap:1px 8px; font-size:10.5px; color:var(--dim); }
   #slots .n { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #slots .lucky { color:var(--gold); } #slots .unlucky { color:var(--bad); }
@@ -239,7 +239,7 @@ const I18N = {
     reconnect: 'the fly is restarting… reconnecting', broke_line: 'bank empty — {0}: {1} spins, {2} FUN · waiting for money', choosing: 'choosing a slot…', exploring: 'unknown game — exploring',
     sl_spins: '{0} spins', sl_streak_loss: 'streak {0} dead', sl_streak_win: 'streak {0} wins', sl_wants: 'wants stake {0}',
     reasons: { streak: '6 dead spins in a row', bored: 'lost interest', bust: 'bust', broke: 'out of money', unplayable: 'could not figure the game out' },
-    ev: { goal: '🎯 goal +15%', lucky: '🍀 lucky slot', bust: '💸 bust', switch: '↪ slot change', broke: '🚬 out of money', refill: '💰 money given' },
+    ev: { goal: '🎯 goal +15%', lucky: '🍀 lucky slot', bust: '💸 bust', switch: '↪ slot change', broke: '🚬 out of money', refill: '💰 money given', bonus: '🎁 bonus bought' },
     th_slot: 'slot', th_spins: 'spins', th_net: 'net', th_best: 'best',
     dopa_empty: 'dopamine per spin (bars), appetite and bank (lines) — history survives page reloads',
     ds_spins: 'spins', ds_hit: 'hit rate', ds_dopa: 'Σ dopamine', ds_net: 'net', ds_desire: 'appetite', ds_corr: 'appetite↔bank corr.',
@@ -274,7 +274,7 @@ const I18N = {
     reconnect: 'муха перезапускається… перепідключення', broke_line: 'банк порожній — {0}: {1} спінів, {2} FUN · чекає на гроші', choosing: 'обирає слот…', exploring: 'невідома гра — досліджує',
     sl_spins: '{0} спінів', sl_streak_loss: 'серія {0} порожніх', sl_streak_win: 'серія {0} виграшів', sl_wants: 'хоче ставку {0}',
     reasons: { streak: '6 порожніх спінів поспіль', bored: 'пропав азарт', bust: 'злив', broke: 'гроші скінчилися', unplayable: 'не розібралася з грою' },
-    ev: { goal: '🎯 ціль +15%', lucky: '🍀 вдалий слот', bust: '💸 злив', switch: '↪ зміна слота', broke: '🚬 гроші скінчилися', refill: '💰 дали грошей' },
+    ev: { goal: '🎯 ціль +15%', lucky: '🍀 вдалий слот', bust: '💸 злив', switch: '↪ зміна слота', broke: '🚬 гроші скінчилися', refill: '💰 дали грошей', bonus: '🎁 куплено бонус' },
     th_slot: 'слот', th_spins: 'спіни', th_net: 'підсумок', th_best: 'найкр.',
     dopa_empty: 'дофамін за спін (стовпчики), азарт і банк (лінії) — історія переживає перезавантаження сторінки',
     ds_spins: 'спінів', ds_hit: 'частота виграшів', ds_dopa: 'Σ дофамін', ds_net: 'підсумок', ds_desire: 'азарт', ds_corr: 'кореляція азарт↔банк',
@@ -449,7 +449,7 @@ async function loadBrain() {
   readoutPos = meta.readout; nDescending = meta.n_descending;
   posArr = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) { posArr[i * 3] = raw[i * 3]; posArr[i * 3 + 1] = -raw[i * 3 + 2]; posArr[i * 3 + 2] = raw[i * 3 + 1]; }
-  base = new Float32Array(N * 3); actPrev = new Uint8Array(N); actCur = new Uint8Array(N); actBytes = actCur; actSlow = new Float32Array(N);
+  base = new Float32Array(N * 3); actPrev = new Uint8Array(N); actCur = new Uint8Array(N); actBytes = new Uint8Array(N); actSlow = new Float32Array(N);
   groupIdx = GROUP_COL.map(() => []); groupMean = GROUP_COL.map(() => 0);
   const gArr = new Float32Array(N);
   for (let i = 0; i < N; i++) { const c = GROUP_COL[groupArr[i]] || GROUP_COL[0]; base.set(c, i * 3); groupIdx[groupArr[i]].push(i); gArr[i] = groupArr[i]; }
@@ -481,10 +481,14 @@ function buildGroups() {
   const g = $('groups'); g.innerHTML = '';
   for (let k = 1; k < GROUP_COL.length; k++) g.insertAdjacentHTML('beforeend', `<div class="grp"><span>${t('groups')[k]}</span><div class="b"><i id="gb${k}" style="background:${GROUP_CSS[k]}"></i></div><span class="v" id="gv${k}">0%</span></div>`);
 }
-function onActivity(bits) {   // new spike bitmask: shift cur -> prev, decay, mark spikes; the shader blends between them
+function onActivity(bits) {   // new spike bitmask: shift cur -> prev, integrate, mark spikes; the shader blends between them
+  // What is drawn is not the raw spike train (a spike is a 1 ms event; ~8 % of neurons spike in every
+  // 4-tick window, so raw spikes would make the whole cloud strobe) but a calcium-imaging-like trace:
+  // a leaky integral of spiking with a ~1 s time constant, plus a small sparkle for the fresh spikes.
   actPrev.set(actCur);
   let frac = 0;
-  for (let i = 0; i < N; i++) { const sp = bits[i >> 3] & (128 >> (i & 7)); if (sp) { actCur[i] = 255; frac++; } else actCur[i] = (actCur[i] * 0.45) | 0; actSlow[i] += ((sp ? 1 : 0) - actSlow[i]) * 0.08; }
+  for (let i = 0; i < N; i++) { const sp = bits[i >> 3] & (128 >> (i & 7)) ? 1 : 0; frac += sp; actSlow[i] += (sp - actSlow[i]) * 0.12;
+    const v = Math.min(1, actSlow[i] * 3.2) * 0.85 + sp * 0.15; actCur[i] = (v * 255) | 0; actBytes[i] = sp * 255; }
   points.geometry.attributes.aPrev.needsUpdate = true; points.geometry.attributes.aCur.needsUpdate = true;
   haloPrev.set(haloCur); for (let m = 0; m < haloIdx.length; m++) haloCur[m] = actCur[haloIdx[m]];
   halo.geometry.attributes.aPrev.needsUpdate = true; halo.geometry.attributes.aCur.needsUpdate = true;
@@ -497,7 +501,7 @@ function updateGroups() {
     let s = 0; for (const i of ids) s += actSlow[i]; const m = s / ids.length; groupMean[g] = m;
     const el = $('gb' + g); if (el) { el.style.width = Math.min(100, m * 300) + '%'; $('gv' + g).textContent = (m * 100).toFixed(1) + '%'; } }
   const boost = brainMat.uniforms.uBoost.value; for (let g = 0; g < 9; g++) boost[g] = Math.min(1, groupMean[g] * 1.5); haloMat.uniforms.uBoost.value = boost;
-  let n = 0; for (let i = 0; i < N; i++) if (actSlow[i] > 0.35) n++;
+  let n = 0; for (let i = 0; i < N; i++) if (actSlow[i] > 0.3) n++;
   const top = groupMean.map((v, k) => [v, k]).filter(x => x[1] > 0 && x[1] < 7).sort((a, b) => b[0] - a[0]).slice(0, 3);   // the two dopamine clusters are tiny: shown in their own bars, not ranked
   $('brainfoot').innerHTML = `${t('strongest')}: ` + top.map(([v, k]) => `<b style="color:${GROUP_CSS[k]}">${t('groups')[k]}</b> ${(v * 100).toFixed(1)}%`).join(' · ') + ` · ${t('bright')}: <b>${n}</b>`;
 }
@@ -718,7 +722,7 @@ function showCasino(c, logEvents = false) {
   $('c-bal').textContent = fmt(c.balance); $('c-bet').textContent = fmt(c.bet); $('c-win').textContent = fmt(c.win); $('c-demo').textContent = fmt(c.demo);
   $('c-win').style.color = c.delta > 0 ? 'var(--ok)' : c.delta < 0 ? 'var(--bad)' : '';
   if (c.drive) showDrive(c.drive, c.kind);
-  if (logEvents) (c.events || []).forEach(e => log(`${t('ev')[e.type] || e.type}: ${e.name || ''} ${e.pct != null ? (e.pct >= 0 ? '+' : '') + e.pct + '%' : ''}`, e.type === 'bust' || e.type === 'broke' ? 'bad' : e.type === 'switch' ? '' : 'ok'));
+  if (logEvents) (c.events || []).forEach(e => log(`${t('ev')[e.type] || e.type}: ${e.name || ''} ${e.price != null ? '−' + fmt(e.price) + ' → +' + fmt(e.win) : e.pct != null ? (e.pct >= 0 ? '+' : '') + e.pct + '%' : ''}`, e.type === 'bust' || e.type === 'broke' ? 'bad' : e.type === 'switch' ? '' : e.type === 'bonus' ? 'act' : 'ok'));
 }
 function showDrive(d, kind) {
   lastDrive = d;
@@ -733,7 +737,7 @@ function showDrive(d, kind) {
   $('slotline').textContent = d.broke ? t('broke_line', d.name || 'slot', d.session_spins, fmt(d.session_net))
     : d.name ? `${d.name}${d.lucky ? ' 🍀' : d.unlucky ? ' ✗' : ''}${kind === 'generic' ? ' · ' + t('exploring') : ''} · ${t('sl_spins', d.session_spins)} · ${d.session_net >= 0 ? '+' : ''}${fmt(d.session_net)} FUN${pct != null ? ' (' + (pct >= 0 ? '+' : '') + pct + '%)' : ''} · ${d.loss_streak ? t('sl_streak_loss', d.loss_streak) : t('sl_streak_win', d.win_streak)}${d.target_bet ? ' · ' + t('sl_wants', fmt(d.target_bet)) : ''}${d.reason ? ' · ' + reasonText(d.reason) : ''}` : t('choosing');
   const ev = $('events'); ev.innerHTML = '';
-  (d.events || []).forEach(e => { const x = document.createElement('div'); x.className = e.type; x.textContent = `${e.time}  ${t('ev')[e.type] || e.type}  ${e.name || ''}${e.pct != null ? '  ' + (e.pct >= 0 ? '+' : '') + e.pct + '%' : ''}${e.balance != null ? '  ' + fmt(e.balance) : ''}${e.why ? '  ' + reasonText(e.why) : ''}`; ev.appendChild(x); });
+  (d.events || []).forEach(e => { const x = document.createElement('div'); x.className = e.type; x.textContent = `${e.time}  ${t('ev')[e.type] || e.type}  ${e.name || ''}${e.pct != null ? '  ' + (e.pct >= 0 ? '+' : '') + e.pct + '%' : ''}${e.price != null ? '  −' + fmt(e.price) + ' → +' + fmt(e.win) : e.balance != null ? '  ' + fmt(e.balance) : ''}${e.why ? '  ' + reasonText(e.why) : ''}`; ev.appendChild(x); });
   const sl = $('slots'); sl.innerHTML = `<span class="n">${t('th_slot')}</span><span>${t('th_spins')}</span><span>${t('th_net')}</span><span>${t('th_best')}</span>`;
   (d.slots || []).forEach(s => { const cls = s.lucky ? 'lucky' : s.unlucky ? 'unlucky' : ''; sl.insertAdjacentHTML('beforeend', `<span class="n ${cls}">${s.lucky ? '🍀 ' : s.unlucky ? '✗ ' : ''}${s.name}</span><span>${s.spins}</span><span class="${cls}">${s.net >= 0 ? '+' : ''}${s.net}</span><span>${s.best_pct >= 0 ? '+' : ''}${s.best_pct}%</span>`); });
 }
@@ -788,7 +792,7 @@ es.onmessage = ev => {
     rateHist.push(frac / Math.max(1, N)); if (rateHist.length > 400) { rateHist.shift(); rewardMarks.forEach(r => r.i--); }
     while (rewardMarks.length && rewardMarks[0].i < 0) rewardMarks.shift();
     $('s-rate').textContent = (frac / Math.max(1, N) * 100).toFixed(1) + '%';
-    drawTrace(); drawRaster(actCur); updateGroups();
+    drawTrace(); drawRaster(actBytes); updateGroups();
   } else if (m.t === 'page') {
     links = m.links; chosen = -1; showTip(-1);
     if (!liveOk) shot.src = m.jpg ? 'data:image/jpeg;base64,' + m.jpg : 'data:image/png;base64,' + m.png;

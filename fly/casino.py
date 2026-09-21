@@ -37,6 +37,16 @@ LOBBY = "https://betking.com.ua/casino/"                              # every pr
 LOBBIES = [LOBBY, "https://betking.com.ua/games/top-provider-games-amusnet/", "https://betking.com.ua/games/all-slots/"]
 EXPLORE_LIMIT = 12    # generic client: this many actions without any money signal -> unplayable
 BONUS_CAP = 150.0     # a free-spins bonus keeps the fields moving; never wait longer than this for one spin
+BOUGHT_CAP = 420.0    # a bought bonus (10 free spins + intro + count-up) takes ~100 s; hard cap
+MAX_STAKES = 31       # stakes use action slots 0..30; "buy the bonus" takes the slot right after the stakes
+BONUS_JS = """
+() => {   // the buy-bonus toggle: text "BUY BONUS" when off, a picture + check mark when on; the modal is another route
+  const b = document.querySelector('#buy-bonus-button'); if (!b) return null;
+  const r = b.getBoundingClientRect();
+  return { on: !/BUY/i.test(b.innerText || ''), x: r.x, y: r.y, w: r.width, h: r.height,
+           modal: !!document.querySelector('#bonus-modal'), collect: !!(document.querySelector('#collect-button') && document.querySelector('#collect-button').getBoundingClientRect().width > 0) };
+}
+"""
 CARDS_JS = """
 () => {   // lobby slot cards: <div class="game-item" data-app-process-url="/online-game/<slug>/"><img alt="name">
   const out = [], seen = new Set();
@@ -135,6 +145,10 @@ class CasinoEnv:
         self.lobby_i = 0
         self.balance: float | None = None     # balance field (pending win not yet credited)
         self.pending_win: float | None = None  # win shown by the game, credited at the next spin
+        self.bonus: dict | None = None         # buy-bonus toggle state of the open client (None = no such feature)
+        self.bonus_ratio: float | None = None  # bonus price / stake (Amusnet: 90x)
+        self.last_bonus: dict | None = None    # what the last purchase cost and paid
+        self.bonus_i: int | None = None        # action index of "buy the bonus" in the current observation
         self.win: float | None = None         # last spin's win
         self.bet: float | None = None
         self.delta = 0.0                      # win - bet of the last spin
@@ -271,6 +285,150 @@ class CasinoEnv:
             self.page.mouse.click(arrow[0] + arrow[2] / 2, arrow[1] + arrow[3] / 2)   # raw click: no actionability wait
             self.page.wait_for_timeout(350)
         return None
+
+    # ---- buy bonus (Amusnet "BUY BONUS" toggle) -----------------------------------------------------
+    def _bonus_state(self) -> dict | None:
+        frame = self.game_frame()
+        try:
+            return frame.evaluate(BONUS_JS) if frame else None
+        except Exception:
+            return None
+
+    def _close_bonus_modal(self):
+        frame = self.game_frame()
+        try:
+            c = frame.locator("#close-modal")
+            if c.count() and c.first.is_visible():
+                c.first.click(timeout=2000)
+                self.page.wait_for_timeout(600)
+        except Exception:
+            pass
+
+    def _open_bonus_dialog(self) -> bool:
+        """Click BUY BONUS until its price dialog (#bonus-modal) shows up: the client swallows the first
+        click after a page load, the next ones open the dialog."""
+        for _ in range(4):
+            st = self._bonus_state()
+            if not st:
+                return False
+            if st["modal"]:
+                return True
+            box = self._frame_box() or {"x": 0, "y": 0}
+            self.page.mouse.click(box["x"] + st["x"] + st["w"] / 2, box["y"] + st["y"] + st["h"] / 2)
+            for _ in range(8):
+                self.page.wait_for_timeout(250)
+                self._tick_brain()
+                st2 = self._bonus_state()
+                if st2 and st2["modal"]:
+                    return True
+        return False
+
+    def _dialog_read(self) -> tuple[float | None, float | None]:
+        """(stake, price) shown by the bonus dialog."""
+        frame = self.game_frame()
+        try:
+            r = frame.evaluate("() => { const t = s => { const e = document.querySelector(s); return e ? e.innerText : null; };"
+                               " return [t('#bonus-active-bet-amount'), t('#bonus-amount')]; }")
+        except Exception:
+            return None, None
+        return _num(r[0]), _num(r[1])
+
+    def _dialog_click(self, sel: str) -> bool:
+        frame, box = self.game_frame(), self._frame_box()
+        try:
+            r = frame.evaluate(ARROW_JS, sel)
+        except Exception:
+            r = None
+        if not r or not box:
+            return False
+        self.page.mouse.click(box["x"] + r[0] + r[2] / 2, box["y"] + r[1] + r[3] / 2)
+        return True
+
+    def _leave_bonus_mode(self):
+        """After a bought feature the strip may show bonus prices instead of stakes: toggle back."""
+        for _ in range(3):
+            btns = self._bet_buttons()
+            st = self._bonus_state()
+            if st and st["modal"]:
+                self._close_bonus_modal()
+                continue
+            if not btns or btns[0]["value"] < 5.0 and not (st and st["on"]):
+                return
+            box = self._frame_box() or {"x": 0, "y": 0}
+            self.page.mouse.click(box["x"] + st["x"] + st["w"] / 2, box["y"] + st["y"] + st["h"] / 2)
+            self.page.wait_for_timeout(1200)
+            self._tick_brain()
+
+    def _buy_bonus(self, target: float | None) -> tuple[float, float, bool, float | None]:
+        """Buy the feature through its dialog at the stake whose price is nearest to `target` (or the
+        cheapest affordable): returns (price, win, ok, balance right after the purchase). The bought
+        bonus plays itself out; we wait for the collect button, take it, and put the strip back."""
+        if not self._open_bonus_dialog():
+            return 0.0, 0.0, False, None
+        stake, price = self._dialog_read()
+        if price is None:
+            self._close_bonus_modal()
+            return 0.0, 0.0, False, None
+        for _ in range(45):                                # walk the dialog's stake to the wanted price
+            stake, price = self._dialog_read()
+            if price is None:
+                break
+            step_dir = None
+            if price > self.drive.bank + 1e-9:
+                step_dir = "left"
+            elif target and price < target * 0.75 and price * 1.3 <= self.drive.bank:
+                step_dir = "right"
+            elif target and price > target * 1.5:
+                step_dir = "left"
+            if not step_dir:
+                break
+            before_price = price
+            self._dialog_click(f"#bonus-arrow-{step_dir}")
+            self.page.wait_for_timeout(200)
+            _, price2 = self._dialog_read()
+            if price2 == before_price:                     # end of the range
+                break
+        stake, price = self._dialog_read()
+        if price is None or price > self.drive.bank + 1e-9:
+            self._close_bonus_modal()
+            return 0.0, 0.0, False, None
+        before = self._read()
+        self._dialog_click("#bonus-buy-button")
+        print(f"casino: buying the bonus for {price:.2f} FUN (stake {stake})")
+        frame = self.game_frame()
+        t0 = time.time()
+        started = False
+        start_balance = None
+        best_win = 0.0
+        last_change = time.time()
+        last = None
+        while time.time() - t0 < BOUGHT_CAP:
+            self.page.wait_for_timeout(250)
+            self._tick_brain()
+            d = self._dom(frame)
+            cur = (_num(d.get("balance")), _num(d.get("win")))
+            if not started:
+                if cur[0] is not None and before[0] is not None and cur[0] < before[0] - 1e-6:
+                    started, start_balance = True, cur[0]
+                elif time.time() - t0 > 6.0:
+                    print("casino: the purchase did not go through")
+                    self._close_bonus_modal()
+                    return 0.0, 0.0, False, None
+                continue
+            if cur[1]:
+                best_win = max(best_win, cur[1])
+            if cur != last:
+                last, last_change = cur, time.time()
+            st = self._bonus_state() or {}
+            # the feature is over when the game offers to collect / gamble and nothing has moved for a while
+            if st.get("collect") and time.time() - last_change > 4.0 and time.time() - t0 > 10.0:
+                break
+            if time.time() - last_change > 45.0:         # nothing at all for a long time: assume it ended quietly
+                break
+        self._recover()                                   # collect
+        self._leave_bonus_mode()
+        real_price = round(before[0] - start_balance, 2) if before[0] is not None and start_balance is not None else price
+        return (real_price if real_price > 0 else price), best_win, True, start_balance
 
     def _recover(self):
         """After a win the game may wait for collect/gamble: collect, dismiss overlays, give it a moment."""
@@ -444,7 +602,12 @@ class CasinoEnv:
             return self.drive.lobby_prior([c["slug"] for c in self._cards])
         if self.kind == "generic":
             return np.array(self.generic.prior()[: self.max_actions], np.float32)
-        return self.drive.bet_prior([b["value"] for b in self._buttons])
+        prior = np.zeros(self.max_actions, np.float32)
+        bp = self.drive.bet_prior([b["value"] for b in self._buttons])
+        prior[: len(bp)] = bp
+        if self.bonus_i is not None:
+            prior[self.bonus_i] = self.drive.bonus_prior()
+        return prior
 
     def _observe(self) -> dict:
         if self.phase == "lobby":
@@ -472,7 +635,12 @@ class CasinoEnv:
                     "casino": {"balance": self.drive.bank, "demo": self.balance, "bet": self.bet, "win": self.win,
                                "delta": self.delta, "cum": self.cum_reward, "phase": "game", "kind": "generic",
                                "drive": self.drive.snapshot(), "events": self.new_events}}
-        self._buttons = self._bet_buttons()[: self.max_actions]
+        self.bonus = self._bonus_state()
+        if self.bonus and (self.bonus["on"] or self.bonus["modal"]):   # left in bonus mode: back to stakes
+            self._leave_bonus_mode()
+            self.bonus = self._bonus_state()
+        self._buttons = self._bet_buttons()[: MAX_STAKES]
+        self.bonus_i = None
         self.links = [(f"bet:{b['value']:.2f}", f"bet {b['value']:.2f} FUN") for b in self._buttons]
         right = self._arrow_box("right") or [0, 0, 0, 0]
         # off-screen bets: the fly lands on the strip's arrow, the env scrolls the strip for it
@@ -481,11 +649,20 @@ class CasinoEnv:
         mask = np.zeros(self.max_actions, bool)
         for i, b in enumerate(self._buttons):            # only stakes the fly can still afford
             mask[i] = b["value"] <= self.drive.bank + 1e-9
+        if self.bonus and self._buttons:                 # the feature can be bought: one more action
+            if self.bonus_ratio is None:
+                self.bonus_ratio = 90.0                  # Amusnet: price = 90 x stake (read exactly on first purchase)
+            min_price = self._buttons[0]["value"] * self.bonus_ratio
+            self.bonus_i = len(self._buttons)
+            self.links.append((f"bonus:{min_price:.2f}", f"buy bonus (from {min_price:.2f} FUN)"))
+            fb = self._frame_box() or {"x": 0, "y": 0}
+            self.boxes.append([int(fb["x"] + self.bonus["x"]), int(fb["y"] + self.bonus["y"]), int(self.bonus["w"]), int(self.bonus["h"])])
+            mask[self.bonus_i] = min_price <= self.drive.bank + 1e-9 and self.drive.desire >= 0.2
         try:
             title = self.page.title()
         except Exception:
             title = ""
-        bal = (self.balance or 0.0) + (self.win or 0.0)   # pending win counts: it is credited at the next spin
+        bal = (self.balance or 0.0) + (self.pending_win or 0.0)   # a pending win counts: credited at the next spin
         self.last_png = self.page.screenshot(type="png")
         return {"png": self.last_png, "mask": mask, "url": self.page.url, "links": self.links,
                 "boxes": self.boxes, "title": title, "session": self.session,
@@ -574,6 +751,8 @@ class CasinoEnv:
             return self._step_generic(action)
         frame = self.game_frame()
         self._demo_check(frame)
+        if self.bonus_i is not None and action == self.bonus_i:
+            return self._step_bonus()
         before = self._read()
         want = self._buttons[action]["id"] if action < len(self._buttons) else None
         b = None
@@ -634,6 +813,40 @@ class CasinoEnv:
     def _explored_total(self) -> int:
         st = self.drive.slots.get(self.cur_slug) or {}
         return max(self.explored, int(st.get("explored", 0)))
+
+    def _step_bonus(self) -> tuple[dict, float, bool]:
+        """Buy the feature: the price is the stake, the whole bought round is the win."""
+        target = (self.drive.target_bet or self._buttons[0]["value"]) * (self.bonus_ratio or 90.0)
+        price, win, ok, start_balance = self._buy_bonus(min(target, self.drive.bank))
+        if not ok:
+            obs = self._observe()
+            return obs, 0.0, False
+        if self._buttons and price > 0:
+            stake_guess = min((b["value"] for b in self._buttons), key=lambda v: abs(v * (self.bonus_ratio or 90.0) - price))
+            if stake_guess > 0:
+                self.bonus_ratio = round(price / stake_guess, 2)
+        self.bet, self.win = price, win
+        self.delta = win - price
+        self.balance, _ = self._read()
+        # collected: some clients credit the win at once, others at the next spin - tell which by the balance
+        self.pending_win = 0.0 if (self.balance is not None and start_balance is not None
+                                   and abs(self.balance - start_balance) > 0.005) else win
+        reward = float(np.clip(self.delta / price, -1.0, 3.0))
+        self.cum_reward += reward
+        with open(self.log_path, "a", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow([f"{time.time():.1f}", self.episode, self.step_i, f"bonus:{price:.2f}", price,
+                                    "", self.balance, f"{win:.2f}", f"{self.delta:.2f}", f"{reward:.3f}",
+                                    f"{max(reward, 0):.3f}", f"{max(-reward, 0):.3f}", f"{self.cum_reward:.3f}",
+                                    f"{self.drive.bank - price + win:.2f}", f"{self.drive.desire:.3f}"])
+        self.new_events = self.drive.bonus(price, win, reward)
+        self.last_bonus = {"price": price, "win": win}
+        print(f"casino: bonus bought for {price:.2f} FUN paid {win:.2f} FUN (reward {reward:+.2f})")
+        obs = self._observe()
+        broke = self.drive.broke or not obs["mask"].any()
+        switch = self.drive.wants_switch() and not broke
+        self.rest = self.drive.wants_rest() and not broke
+        done = self.step_i >= self.max_steps or broke or switch or self.rest
+        return obs, reward, done
 
     def _step_generic(self, action: int) -> tuple[dict, float, bool]:
         """Unknown client: do the action, watch the wire for a balance drop (stake) and a win."""

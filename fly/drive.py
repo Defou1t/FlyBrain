@@ -184,6 +184,20 @@ class Drive:
         self._save()
         return events
 
+    def bonus(self, price: float, win: float, reward: float) -> list[dict]:
+        """A bought feature counts like one big spin, and is recorded as an event of its own."""
+        st = self.slots.get(self.slot)
+        events = self.spin(price, win, reward, None)
+        if st is not None:
+            st["bonuses"] = st.get("bonuses", 0) + 1
+            st["bonus_net"] = round(st.get("bonus_net", 0.0) + win - price, 2)
+        events.insert(0, self._event("bonus", self.bank, price=round(price, 2), win=round(win, 2)))
+        return events
+
+    def bonus_prior(self) -> float:
+        """Log-prior of buying the feature: temptation grows with appetite and after a lucky streak."""
+        return -1.2 + 2.2 * self.desire + 0.3 * min(self.win_streak, 3)
+
     # ---- decisions ----------------------------------------------------------------------------
     def wants_switch(self) -> bool:
         if self.loss_streak >= LOSS_STREAK_SWITCH:
