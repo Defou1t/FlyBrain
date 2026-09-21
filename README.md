@@ -69,7 +69,9 @@ The page opens in the **arcade view**: a dark hall, a slot cabinet with the live
 browser on its screen, the fly perched on the control deck watching the reels, its brain floating
 above the marquee, a slowly orbiting camera and a small HUD (slot, bank, appetite, Σ dopamine, last
 spin). *Enter the game →* switches to the card desktop below; *⬢ arcade view* goes back; the choice
-is remembered.
+is remembered. The cabinet and the fly are clickable: the menu offers *Enter the game*, the session
+cookie and the reset (and money when the fly is broke) — flying / shooing / wandering live only on
+the desktop, where those actions are visible.
 
 Everything on the desktop is a card: drag by the header (cards snap to each other and to the window), resize by the
 corner, ⤢ maximizes, *↺ layout* restores the default. The UI is English; **EN / UK** in the corner

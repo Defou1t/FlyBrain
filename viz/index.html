@@ -212,7 +212,7 @@
   <div class="row"><span data-i18n="ds_dopa">Σ dopamine</span><b id="hud-dopa">—</b></div>
   <div class="last" id="hud-last"></div></div>
 <div id="hint" data-i18n-html="hint"><b>cards</b> drag by the header, resize by the corner, snap to each other · ⤢ maximize</div>
-<div id="gear"><div class="gear-title" data-i18n="gear_title">⚙ the fly</div><button id="g-anim"></button><button id="g-pause"></button><button id="g-mode"></button><button id="g-refill" style="display:none" data-i18n="g_refill">Give 50 000 FUN</button><hr><button id="g-session" data-i18n="g_session">Use my own account (PHPSESSID)…</button><button id="g-reset" class="danger" data-i18n="g_reset">Reset results &amp; memory…</button></div>
+<div id="gear"><div class="gear-title" id="gear-title">⚙ the fly</div><button id="g-enter" data-i18n="enter_btn">Enter the game →</button><button id="g-anim"></button><button id="g-pause"></button><button id="g-mode"></button><button id="g-refill" style="display:none" data-i18n="g_refill">Give 50 000 FUN</button><hr><button id="g-session" data-i18n="g_session">Use my own account (PHPSESSID)…</button><button id="g-reset" class="danger" data-i18n="g_reset">Reset results &amp; memory…</button></div>
 <div id="flash"></div>
 <div id="wait" data-i18n="waiting">waiting for the simulation…</div>
 <div id="session">
@@ -267,7 +267,7 @@ const I18N = {
     dopa_empty: 'dopamine per spin (bars), appetite and bank (lines) — history survives page reloads',
     ds_spins: 'spins', ds_hit: 'hit rate', ds_dopa: 'Σ dopamine', ds_net: 'net', ds_desire: 'appetite', ds_corr: 'appetite↔bank corr.',
     lang_switched: 'language: English',
-    arcade_btn: '⬢ arcade view', enter_btn: 'Enter the game →', hud_watching: 'watching the reels', hud_win: 'last spin: +{0} FUN (dopamine +{1})', hud_loss: 'last spin: {0} FUN (dopamine {1})',
+    arcade_btn: '⬢ arcade view', enter_btn: 'Enter the game →', gear_machine: '🎰 the machine', hud_watching: 'watching the reels', hud_win: 'last spin: +{0} FUN (dopamine +{1})', hud_loss: 'last spin: {0} FUN (dopamine {1})',
   },
   uk: {
     brain_title: 'Мозок мухи · MaleCNS', maximize: 'розгорнути', rotate_brain: 'тягніть, щоб обертати', l_rest: 'спокій', l_stim: 'стимульовані', l_fire: 'спайки',
@@ -303,7 +303,7 @@ const I18N = {
     dopa_empty: 'дофамін за спін (стовпчики), азарт і банк (лінії) — історія переживає перезавантаження сторінки',
     ds_spins: 'спінів', ds_hit: 'частота виграшів', ds_dopa: 'Σ дофамін', ds_net: 'підсумок', ds_desire: 'азарт', ds_corr: 'кореляція азарт↔банк',
     lang_switched: 'мова: українська',
-    arcade_btn: '⬢ зал автоматів', enter_btn: 'Увійти в гру →', hud_watching: 'дивиться на барабани', hud_win: 'останній спін: +{0} FUN (дофамін +{1})', hud_loss: 'останній спін: {0} FUN (дофамін {1})',
+    arcade_btn: '⬢ зал автоматів', enter_btn: 'Увійти в гру →', gear_machine: '🎰 автомат', hud_watching: 'дивиться на барабани', hud_win: 'останній спін: +{0} FUN (дофамін +{1})', hud_loss: 'останній спін: {0} FUN (дофамін {1})',
   },
 };
 let LANG = 'en';
@@ -576,8 +576,27 @@ function applyState(s) {
 }
 const flyScreen = new THREE.Vector3();
 function flyOnScreen() { flyScreen.copy(flyRoot.position).project(view === 'arcade' ? arcadeCam : camera); return [(flyScreen.x + 1) / 2 * W, (1 - flyScreen.y) / 2 * H]; }
-addEventListener('mousemove', e => { if (!isLocal || !fly.ready) return; const [fx, fy] = flyOnScreen(), r = view === 'arcade' ? 90 : Math.min(120, flyRoot.scale.x * fly.len * 0.5); glCanvas.classList.toggle('hit', Math.hypot(e.clientX - fx, e.clientY - fy) < r); });
-glCanvas.addEventListener('click', e => { if (view === 'arcade' && !glCanvas.classList.contains('hit')) return; const g = $('gear'); if (g.style.display === 'flex') { g.style.display = 'none'; return; } g.style.display = 'flex'; g.style.left = Math.min(W - 250, e.clientX + 12) + 'px'; g.style.top = Math.min(H - 260, e.clientY - 20) + 'px'; });
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+function arcadeHit(x, y) {   // what is under the cursor in the arcade: 'fly' | 'cabinet' | null
+  ndc.set(x / W * 2 - 1, -(y / H) * 2 + 1); ray.setFromCamera(ndc, arcadeCam);
+  if (fly.ready && ray.intersectObject(flyRoot, true).length) return 'fly';
+  return ray.intersectObject(cabinet, true).length ? 'cabinet' : null;
+}
+let hover = null;
+addEventListener('mousemove', e => { if (!isLocal || !fly.ready) return;
+  if (view === 'arcade') { hover = arcadeHit(e.clientX, e.clientY); glCanvas.classList.toggle('hit', !!hover); return; }
+  const [fx, fy] = flyOnScreen(), r = Math.min(120, flyRoot.scale.x * fly.len * 0.5); hover = Math.hypot(e.clientX - fx, e.clientY - fy) < r ? 'fly' : null; glCanvas.classList.toggle('hit', !!hover); });
+function openGear(x, y, what) {
+  const g = $('gear'), inArcade = view === 'arcade';
+  $('gear-title').textContent = what === 'cabinet' ? t('gear_machine') : t('gear_title');
+  // flying / shooing / wandering only make sense where the actions are visible - on the desktop
+  $('g-enter').style.display = inArcade ? 'block' : 'none';
+  $('g-anim').style.display = inArcade ? 'none' : 'block'; $('g-pause').style.display = inArcade ? 'none' : 'block'; $('g-mode').style.display = inArcade ? 'none' : 'block';
+  g.style.display = 'flex'; g.style.left = Math.min(W - 250, x + 12) + 'px'; g.style.top = Math.min(H - 260, y - 20) + 'px';
+}
+glCanvas.addEventListener('click', e => { const g = $('gear'); if (g.style.display === 'flex') { g.style.display = 'none'; return; }
+  const what = view === 'arcade' ? arcadeHit(e.clientX, e.clientY) : hover; if (!what) return; openGear(e.clientX, e.clientY, what); });
+$('g-enter').onclick = () => { $('gear').style.display = 'none'; setView('desktop'); };
 addEventListener('pointerdown', e => { if (!e.target.closest('#gear') && e.target !== glCanvas) $('gear').style.display = 'none'; });
 async function cmd(do_) { $('gear').style.display = 'none'; const r = await (await fetch('/admin/cmd?do=' + do_)).json(); log(t('log_cmd', do_), 'act'); return r; }
 $('g-anim').onclick = () => { flyCtl.anim = flyCtl.anim === 'walk' ? 'fly' : 'walk'; try { localStorage.setItem('fly.anim', flyCtl.anim); } catch (e) {} applyState(flyCtl); log(flyCtl.anim === 'walk' ? t('log_walk') : t('log_fly')); };
