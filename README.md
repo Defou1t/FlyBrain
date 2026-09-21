@@ -36,7 +36,8 @@ no other Python installation - older, newer, Microsoft Store - can conflict with
 git clone https://github.com/Defou1t/FlyBrain.git && cd FlyBrain && start.bat
 ```
 
-`start.bat --setup` only installs, `start.bat --synthetic` is a quick test on a random brain
+`update.bat` pulls the latest version from GitHub (a running fly restarts itself with the new
+code). `stop.bat` stops it. `start.bat --setup` only installs, `start.bat --synthetic` is a quick test on a random brain
 (nothing to download), `start.bat --tunnel` adds a public link. Linux / macOS: `./start.sh` does the
 same with a private virtualenv in `runtime/venv` (needs a system `python3` 3.11+).
 
