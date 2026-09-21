@@ -13,7 +13,9 @@ it believes it is spending. Appetite, stake patterns, lucky and unlucky slots, g
 tracked on top of the brain, and everything is visible live: the brain, the 3-D fly, the browser
 window, and the dopamine / appetite / winnings chart.
 
-![FlyBrain](docs/screenshot.jpg)
+![FlyBrain — arcade view](docs/arcade.jpg)
+
+![FlyBrain — the desktop](docs/screenshot.jpg)
 
 ```
 screenshot ──► retina (R1-R6 per hex column, two eyes) ──► LIF over the whole connectome
@@ -63,7 +65,13 @@ filtered out (`FORBIDDEN` in `fly/browser.py`) — extend that list, never shrin
 
 ## The page
 
-Everything is a card: drag by the header (cards snap to each other and to the window), resize by the
+The page opens in the **arcade view**: a dark hall, a slot cabinet with the live video of the fly's
+browser on its screen, the fly perched on the control deck watching the reels, its brain floating
+above the marquee, a slowly orbiting camera and a small HUD (slot, bank, appetite, Σ dopamine, last
+spin). *Enter the game →* switches to the card desktop below; *⬢ arcade view* goes back; the choice
+is remembered.
+
+Everything on the desktop is a card: drag by the header (cards snap to each other and to the window), resize by the
 corner, ⤢ maximizes, *↺ layout* restores the default. The UI is English; **EN / UK** in the corner
 switches to Ukrainian.
 

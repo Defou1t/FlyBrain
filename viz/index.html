@@ -722,32 +722,88 @@ const vidCanvas = document.createElement('canvas'); vidCanvas.width = 800; vidCa
 vctx.fillStyle = '#101625'; vctx.fillRect(0, 0, 800, 500);
 const vidTex = new THREE.CanvasTexture(vidCanvas); vidTex.minFilter = THREE.LinearFilter;
 const cabinet = new THREE.Group(); arcade.add(cabinet);
-{
-  const dark = new THREE.MeshStandardMaterial({ color: 0x151a2b, roughness: 0.55, metalness: 0.35 });
-  const trim = new THREE.MeshStandardMaterial({ color: 0x0c1020, roughness: 0.4, metalness: 0.6, emissive: 0x1b2a66, emissiveIntensity: 0.6 });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.05, 0.7), dark); body.position.set(0, 0.525, 0); cabinet.add(body);
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 0.5), trim); deck.position.set(0, 1.09, 0.1); deck.rotation.x = -0.28; cabinet.add(deck);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.95, 0.42), dark); head.position.set(0, 1.62, -0.14); head.rotation.x = -0.12; cabinet.add(head);
-  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.98, 0.6125), new THREE.MeshBasicMaterial({ map: vidTex, toneMapped: false })); screen.position.set(0, 1.62, 0.075); screen.rotation.x = -0.12; cabinet.add(screen);
-  const bezel = new THREE.Mesh(new THREE.PlaneGeometry(1.04, 0.68), new THREE.MeshStandardMaterial({ color: 0x05070c, roughness: 0.3, metalness: 0.5 })); bezel.position.set(0, 1.62, 0.07); bezel.rotation.x = -0.12; cabinet.add(bezel);
-  const marquee = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.16, 0.44), trim); marquee.position.set(0, 2.16, -0.14); cabinet.add(marquee);
-  const ledge = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.05, 0.36), trim); ledge.position.set(0, 1.14, 0.3); cabinet.add(ledge);
-  for (let i = 0; i < 3; i++) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 20), new THREE.MeshStandardMaterial({ color: [0xff5c5c, 0xffd93b, 0x5ee29a][i], emissive: [0xff5c5c, 0xffd93b, 0x5ee29a][i], emissiveIntensity: 0.5, roughness: 0.4 })); b.position.set(-0.25 + i * 0.25, 1.17, 0.36); cabinet.add(b); }
-  const glow = new THREE.PointLight(0x7fb0ff, 1.4, 4, 2); glow.position.set(0, 1.7, 0.6); cabinet.add(glow); cabinet.userData.glow = glow;
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x0a0d18, roughness: 0.9, metalness: 0.1 })); floor.rotation.x = -Math.PI / 2; arcade.add(floor);
-  const grid = new THREE.GridHelper(40, 80, 0x22305a, 0x141c33); grid.position.y = 0.002; arcade.add(grid);
-  arcade.add(new THREE.HemisphereLight(0x8fa8ff, 0x1a1208, 0.55));
-  const keyA = new THREE.DirectionalLight(0xfff0dd, 0.9); keyA.position.set(-2, 4, 3); arcade.add(keyA);
-  const rim = new THREE.DirectionalLight(0x57d6ff, 0.35); rim.position.set(3, 2, -3); arcade.add(rim);
-  const warm = new THREE.PointLight(0xffd6a8, 1.6, 3.5, 2); warm.position.set(0.7, 1.9, 1.3); arcade.add(warm);   // a warm lamp on the fly
+// The slot cabinet. Built from parts that never share a face (no z-fighting): a rounded pedestal, a
+// wedge-shaped control deck with a flat ledge (the fly's perch), a bevelled screen frame with the
+// screen recessed inside its hole, a light-box marquee, LED strips, buttons, a coin tray.
+function roundedBox(w, h, d, r, mat) {                 // extruded rounded rectangle, bevelled front/back
+  const sh = new THREE.Shape(); const x = -w / 2, y = -h / 2;
+  sh.moveTo(x + r, y); sh.lineTo(x + w - r, y); sh.quadraticCurveTo(x + w, y, x + w, y + r); sh.lineTo(x + w, y + h - r); sh.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  sh.lineTo(x + r, y + h); sh.quadraticCurveTo(x, y + h, x, y + h - r); sh.lineTo(x, y + r); sh.quadraticCurveTo(x, y, x + r, y);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: d, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 3, curveSegments: 6 });
+  g.translate(0, 0, -d / 2); return new THREE.Mesh(g, mat);
 }
-const brainLight = new THREE.PointLight(0x9fb4ff, 0.8, 3, 2); brainLight.position.set(0, 2.7, 0.7);
+function frameWithHole(w, h, iw, ih, d, mat) {          // picture frame: a rounded plate with a rectangular hole
+  const sh = new THREE.Shape(); const r = 0.05, x = -w / 2, y = -h / 2;
+  sh.moveTo(x + r, y); sh.lineTo(x + w - r, y); sh.quadraticCurveTo(x + w, y, x + w, y + r); sh.lineTo(x + w, y + h - r); sh.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  sh.lineTo(x + r, y + h); sh.quadraticCurveTo(x, y + h, x, y + h - r); sh.lineTo(x, y + r); sh.quadraticCurveTo(x, y, x + r, y);
+  const hole = new THREE.Path(); hole.moveTo(-iw / 2, -ih / 2); hole.lineTo(iw / 2, -ih / 2); hole.lineTo(iw / 2, ih / 2); hole.lineTo(-iw / 2, ih / 2); hole.lineTo(-iw / 2, -ih / 2); sh.holes.push(hole);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: d, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.015, bevelSegments: 3, curveSegments: 6 });
+  g.translate(0, 0, -d / 2); return new THREE.Mesh(g, mat);
+}
+function wedge(w, back, front, depth, ledge, mat) {     // side profile (z,y) extruded along x: slope + flat front ledge
+  const sh = new THREE.Shape(); sh.moveTo(-depth / 2, 0); sh.lineTo(depth / 2, 0); sh.lineTo(depth / 2, front); sh.lineTo(depth / 2 - ledge, front); sh.lineTo(-depth / 2, back); sh.lineTo(-depth / 2, 0);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: w, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 2 });
+  g.rotateY(-Math.PI / 2); g.translate(w / 2, 0, 0); return new THREE.Mesh(g, mat);   // extrude ran along -x after the turn: recentre
+}
+function marqueeTexture() {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 192; const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 1024, 0); g.addColorStop(0, '#1b1440'); g.addColorStop(0.5, '#2a1660'); g.addColorStop(1, '#1b1440'); x.fillStyle = g; x.fillRect(0, 0, 1024, 192);
+  x.font = 'bold 118px "Segoe UI", Arial'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.shadowColor = '#ff4dd2'; x.shadowBlur = 28; x.fillStyle = '#ffe8f7'; x.fillText('FLYBRAIN', 512, 96);
+  x.shadowBlur = 0; x.font = '86px "Segoe UI Emoji", "Apple Color Emoji", sans-serif'; x.fillText('🪰', 118, 100); x.fillText('🎰', 906, 100);
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
+}
+{
+  const gloss = new THREE.MeshPhysicalMaterial({ color: 0x0b0f1c, roughness: 0.28, metalness: 0.2, clearcoat: 0.9, clearcoatRoughness: 0.18, envMap, envMapIntensity: 0.6 });
+  const matte = new THREE.MeshStandardMaterial({ color: 0x1c2238, roughness: 0.7, metalness: 0.3 });
+  const steel = new THREE.MeshStandardMaterial({ color: 0x6e7690, roughness: 0.35, metalness: 0.85, envMap, envMapIntensity: 0.8 });
+  const ledCyan = new THREE.MeshBasicMaterial({ color: 0x57f0ff }), ledPink = new THREE.MeshBasicMaterial({ color: 0xff4dd2 });
+  const pedTop = 0.92, deckBack = 0.22, ledgeH = 0.07, deckDepth = 0.62;
+  // pedestal + kick plate + coin tray
+  const ped = roundedBox(1.0, pedTop - 0.06, 0.6, 0.04, gloss); ped.position.set(0, 0.06 + (pedTop - 0.06) / 2, 0); cabinet.add(ped);
+  const kick = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.06, 0.64), matte); kick.position.set(0, 0.03, 0); cabinet.add(kick);
+  const tray = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.11, 0.09), matte); tray.position.set(0, 0.24, 0.335); cabinet.add(tray);
+  const trayLip = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.012, 0.11), steel); trayLip.position.set(0, 0.185, 0.34); cabinet.add(trayLip);
+  // control deck: slope at the back, flat ledge in front (the perch)
+  const deck = wedge(1.0, deckBack, ledgeH, deckDepth, 0.26, gloss); deck.position.set(0, pedTop, 0.02); cabinet.add(deck);
+  const deckTrim = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.012, 0.016), ledCyan); deckTrim.position.set(0, pedTop + ledgeH + 0.006, 0.02 + deckDepth / 2 - 0.004); cabinet.add(deckTrim);
+  // buttons on the slope
+  const slopeAng = Math.atan2(deckBack - ledgeH, deckDepth - 0.26);
+  const onSlope = (mesh, u, along) => { const z0 = 0.02 + deckDepth / 2 - 0.26, y0 = pedTop + ledgeH; mesh.position.set(u, y0 + Math.sin(slopeAng) * along + 0.012 * Math.cos(slopeAng), z0 - Math.cos(slopeAng) * along - 0.012 * Math.sin(slopeAng)); mesh.rotation.x = slopeAng; cabinet.add(mesh); };
+  const spinBtn = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.08, 0.035, 32), new THREE.MeshPhysicalMaterial({ color: 0xff2e4a, emissive: 0xff2e4a, emissiveIntensity: 0.35, roughness: 0.3, clearcoat: 1 })); onSlope(spinBtn, 0.3, 0.24); cabinet.userData.spin = spinBtn;
+  [0xffd93b, 0x5ee29a, 0x57d6ff].forEach((col, i) => { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.035, 0.025, 24), new THREE.MeshPhysicalMaterial({ color: col, emissive: col, emissiveIntensity: 0.3, roughness: 0.3, clearcoat: 1 })); onSlope(b, -0.34 + i * 0.1, 0.27); });
+  // head: body box behind, bevelled frame in front, the screen recessed inside the frame's hole
+  const headY = pedTop + deckBack + 0.42, tilt = -0.1;
+  const head = new THREE.Group(); head.position.set(0, headY, -0.02 + deckDepth / 2 - deckDepth); head.rotation.x = tilt; cabinet.add(head);
+  const headBox = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.8, 0.34), matte); headBox.position.set(0, 0, -0.245); head.add(headBox);
+  const frame = frameWithHole(1.0, 0.76, 0.84, 0.545, 0.05, gloss); frame.position.set(0, 0, 0); head.add(frame);
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.525), new THREE.MeshBasicMaterial({ map: vidTex, toneMapped: false })); screen.position.set(0, 0, -0.03); head.add(screen);
+  const screenBack = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 0.56), new THREE.MeshBasicMaterial({ color: 0x000000 })); screenBack.position.set(0, 0, -0.035); head.add(screenBack);
+  [-1, 1].forEach(sg => { const strip = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.7, 0.014), ledPink); strip.position.set(sg * 0.515, 0, -0.06); head.add(strip); });
+  // marquee light box
+  const mq = roundedBox(1.0, 0.2, 0.3, 0.03, matte); mq.position.set(0, headY + 0.51, -0.22); cabinet.add(mq);
+  const mqFace = new THREE.Mesh(new THREE.PlaneGeometry(0.94, 0.16), new THREE.MeshBasicMaterial({ map: marqueeTexture(), toneMapped: false })); mqFace.position.set(0, headY + 0.51, -0.22 + 0.15 + 0.014); cabinet.add(mqFace);
+  const mqGlow = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.012, 0.28), ledPink); mqGlow.position.set(0, headY + 0.51 - 0.107, -0.22); cabinet.add(mqGlow);
+  // side LED strips down the pedestal front edges
+  [-1, 1].forEach(sg => { const strip = new THREE.Mesh(new THREE.BoxGeometry(0.012, pedTop - 0.12, 0.012), ledCyan); strip.position.set(sg * 0.5, 0.06 + (pedTop - 0.06) / 2, 0.322); cabinet.add(strip); });
+  // lights: the screen's glow on the fly, a cone from above, room fill
+  const glow = new THREE.PointLight(0x9fc4ff, 1.2, 3.5, 2); glow.position.set(0, headY - 0.1, 0.55); cabinet.add(glow); cabinet.userData.glow = glow;
+  const spot = new THREE.SpotLight(0xdfe6ff, 1.1, 9, 0.5, 0.6, 1.5); spot.position.set(0.4, 4.2, 1.6); spot.target.position.set(0, 1.2, 0.1); arcade.add(spot); arcade.add(spot.target);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x0a0d18, roughness: 0.85, metalness: 0.15 })); floor.rotation.x = -Math.PI / 2; arcade.add(floor);
+  const grid = new THREE.GridHelper(40, 80, 0x22305a, 0x141c33); grid.position.y = 0.002; arcade.add(grid);
+  arcade.add(new THREE.HemisphereLight(0x8fa8ff, 0x1a1208, 0.5));
+  const keyA = new THREE.DirectionalLight(0xfff0dd, 0.7); keyA.position.set(-2, 4, 3); arcade.add(keyA);
+  const rim = new THREE.DirectionalLight(0x57d6ff, 0.35); rim.position.set(3, 2, -3); arcade.add(rim);
+  const warm = new THREE.PointLight(0xffd6a8, 1.6, 3.5, 2); warm.position.set(0.7, 1.7, 1.3); arcade.add(warm);   // a warm lamp on the fly
+  cabinet.userData.perch = { y: pedTop + ledgeH, z: 0.02 + deckDepth / 2 - 0.13, screenY: headY };
+}
+const brainLight = new THREE.PointLight(0x9fb4ff, 0.8, 3, 2); brainLight.position.set(0, 2.6, 0.6);
 function setView(v) {
   view = v; try { localStorage.setItem('fly.view', v); } catch (e) {}
   document.body.classList.toggle('arcade', v === 'arcade');
   if (v === 'arcade') {
     scene.remove(flyRoot); scene.remove(brainGroup); scene.remove(smokePts); arcade.add(flyRoot); arcade.add(brainGroup); arcade.add(brainLight); arcade.add(smokePts);
-    brainGroup.position.set(0, 2.42, 0.25); brainGroup.scale.setScalar(0.62); brainGroup.position.y -= brainTop * 0.62;
+    brainGroup.position.set(0, 2.42, 0.0); brainGroup.scale.setScalar(0.58); brainGroup.position.y -= brainTop * 0.62;
     if (brainMat) { brainMat.uniforms.uCamZ.value = haloMat.uniforms.uCamZ.value = 2.6; brainMat.uniforms.uSize.value = haloMat.uniforms.uSize.value = 2.6; brainMat.uniforms.uHideBelow.value = haloMat.uniforms.uHideBelow.value = NECK; }
     if (fly.ready) flyRoot.scale.setScalar(0.72 / fly.len);
     flyState.mode = 'perch';
@@ -774,7 +830,7 @@ function updateHud(c) {
 
 // ================================================================== browser card: live MJPEG + overlay
 const overlay = $('overlay'), octx = overlay.getContext('2d');
-let links = [], chosen = -1, ripple = null, k = 1;
+let links = [], chosen = -1, ripple = null, k = 1, lastDecisionAt = -1e9;
 const live = $('live'), shot = $('shot');
 let liveOk = false;
 live.onload = () => { liveOk = true; live.style.display = 'block'; };          // first frame of the stream decoded
@@ -931,7 +987,7 @@ es.onmessage = ev => {
     setFlyLabel(flyCtl.broke ? t('fly_smoke') : flyCtl.paused ? t('fly_shooed') : m.casino && m.casino.phase === 'lobby' ? t('fly_lobby') : m.casino && m.casino.kind === 'generic' ? t('fly_explore') : m.casino ? t('fly_slots') : t('fly_look'));
     log(m.casino ? t(m.casino.phase === 'lobby' ? 'log_lobby' : 'log_slot', fmt(m.casino.balance), m.links.length) : t('log_page', m.url.replace(/^https?:\/\/[^/]+/, '') || '/', m.links.length));
   } else if (m.t === 'decision') {
-    chosen = m.a; renderLinks(m.p); drawOverlay(); showTip(chosen);
+    chosen = m.a; lastDecisionAt = performance.now(); renderLinks(m.p); drawOverlay(); showTip(chosen);
     if (links[chosen]) { const [sx, sy] = linkScreen(links[chosen].box); flyTo(toWorld(sx, sy, 6), 'landed', links[chosen].box); setFlyLabel(t('fly_fly'));
       $('status').textContent = t('st_click', links[chosen].text || links[chosen].url); log(t('log_decision', chosen, links[chosen].text || links[chosen].url, (m.p[chosen] * 100).toFixed(1)) + (links[chosen].box[2] <= 0 ? t('hidden_link') : ''), 'act'); }
   } else if (m.t === 'reward') {
@@ -1004,8 +1060,8 @@ function animate(now) {
     tmp.set(fs.pos.x + 1, fs.pos.y + 0.05, fs.pos.z + 0.55); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp); flyRoot.rotateX(-0.15); qA.copy(flyRoot.quaternion); flyRoot.quaternion.copy(qTarget).slerp(qA, Math.min(1, dt * 5));
   } else if (fs.mode === 'perch') {   // arcade: sits on the cabinet's ledge, facing the screen, watching the reels
     grounded = true;
-    fs.pos.set(0.02, 1.27, 0.30); flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t0 * 1.7) * 0.004;
-    tmp.set(fs.pos.x - 0.02, fs.pos.y + 0.2 + Math.sin(t0 * 0.6) * 0.05, fs.pos.z - 0.8); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp); flyRoot.rotateX(0.55 + Math.sin(t0 * 0.9) * 0.05); flyRoot.rotateY(Math.sin(t0 * 0.35) * 0.12);
+    const pr = cabinet.userData.perch; fs.pos.set(-0.04, pr.y + 0.105, pr.z + 0.06); flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t0 * 1.7) * 0.004;
+    tmp.set(fs.pos.x - 0.02, fs.pos.y + 0.28 + Math.sin(t0 * 0.6) * 0.05, fs.pos.z - 0.8); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp); flyRoot.rotateX(0.55 + Math.sin(t0 * 0.9) * 0.05); flyRoot.rotateY(Math.sin(t0 * 0.35) * 0.12);
     qA.copy(flyRoot.quaternion); flyRoot.quaternion.copy(qTarget).slerp(qA, Math.min(1, dt * 4));
     if (flyCtl.broke) smoking = true;
   } else if (fs.mode === 'landed') {
@@ -1035,11 +1091,12 @@ function animate(now) {
   if (ripple) drawOverlay();
   if (view === 'arcade') {
     if (fs.mode !== 'perch' && fs.mode !== 'smoke') fs.mode = 'perch';
-    const ang = Math.sin(t0 * 0.11) * 0.6, dist = 2.35 + Math.sin(t0 * 0.07) * 0.2;
+    const ang = Math.sin(t0 * 0.11) * 0.6, dist = 3.0 + Math.sin(t0 * 0.07) * 0.2;
     arcadeCam.position.set(Math.sin(ang) * dist, 1.95 + Math.sin(t0 * 0.13) * 0.1, Math.cos(ang) * dist + 0.3);
-    arcadeCam.lookAt(0, 1.82, 0.1);
+    arcadeCam.lookAt(0, 1.58, 0.05);
     updateVideoTexture();
     cabinet.userData.glow.intensity = 1.1 + 0.3 * Math.sin(t0 * 2.3) + 0.2 * Math.sin(t0 * 5.1);
+    cabinet.userData.spin.material.emissiveIntensity = 0.3 + 0.9 * Math.max(0, 1 - (now - lastDecisionAt) / 700);
     if (points) { brainGroup.rotation.set(0.1, t0 * 0.15, 0); }
   }
   if (points) {
