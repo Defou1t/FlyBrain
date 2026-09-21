@@ -144,6 +144,8 @@ class VizServer:
         self.frame_cv = threading.Condition()
         self.history: list[dict] = []                        # spins of this session (page reload keeps the charts)
         self._load_history()
+        self.cast_count = 0                                  # screencast frames received this second (page fps badge)
+        threading.Thread(target=self._stats, daemon=True).start()
 
         has = ~np.isnan(brain.soma[:, 0])
         idx = np.flatnonzero(has)
@@ -251,7 +253,8 @@ class VizServer:
                     self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
                     self.send_header("Cache-Control", "no-cache")
                     self.end_headers()
-                    gap = 1 / 60 if local else 1 / 8
+                    want = parse_qs(u.query).get("fps", [""])[0]
+                    gap = 1 / max(5, min(60, float(want))) if want else (1 / 60 if local else 1 / 8)   # ?fps=30 for weaker machines
                     seen, last = -1, 0.0
                     try:
                         while True:
@@ -405,6 +408,14 @@ class VizServer:
                 for cl in self.clients:
                     cl.put("kick", b"", droppable=False)
 
+    def _stats(self):
+        """Once a second: how many live frames the fly's browser produced (shown as 'live · N fps')."""
+        while True:
+            time.sleep(1.0)
+            n, self.cast_count = self.cast_count, 0
+            if self.clients:
+                self.send({"t": "stat", "cast": n})
+
     def _watch_page(self):
         """viz/index.html edited -> tell open pages to reload (no restart needed for the page itself)."""
         path = os.path.join(STATIC, "index.html")
@@ -457,6 +468,7 @@ class VizServer:
         with self.frame_cv:
             self.latest_jpg = jpg
             self.frame_seq += 1
+            self.cast_count += 1
             self.frame_cv.notify_all()
 
     def decision(self, probs: np.ndarray, action: int, rate: float):

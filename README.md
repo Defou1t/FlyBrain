@@ -200,7 +200,9 @@ terminal was closed or the process killed).
 * the brain keeps running while the environment waits (the reels spin for seconds) — it looks at the
   live frames, so the activity is continuous rather than a burst at each decision;
 * the point cloud is shaded on the GPU (two Uint8 activity attributes, interpolated in the vertex
-  shader); the page's own frame time is ~0.5 ms of JavaScript.
+  shader); the page's own frame time is ~0.5 ms of JavaScript;
+* **lite mode** (⚡ in the corner, or automatic after 3 s of slow frames): pixel ratio 1, no halo, no
+  fur, video at 30 fps - for weaker graphics cards (a GTX 1060 with a 4K screen went from ~5 to 60 fps).
 
 ## Watching from elsewhere
 

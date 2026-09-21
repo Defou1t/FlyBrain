@@ -34,7 +34,7 @@ def main():
     ap.add_argument("--viz", action="store_true", help="open the live 3-D visualiser (slows the sim to real time)")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--no-open", action="store_true", help="do not open the visualiser in a browser tab")
-    ap.add_argument("--pace", type=float, default=1.1, help="seconds to wait after a decision (viz only)")
+    ap.add_argument("--pace", type=float, default=0.7, help="seconds to wait after a decision (viz only)")
     ap.add_argument("--session-file", default=SESSION_FILE,
                     help="file with the PHPSESSID cookie value (or set $FLY_PHPSESSID); the fly browses logged in")
     ap.add_argument("--casino", action="store_true", help="play a demo slot (bets = actions) instead of browsing")
@@ -65,7 +65,7 @@ def main():
     viz = None
     if args.viz:
         from .viz import VizServer
-        viz = VizServer(brain, port=args.port, open_browser=not args.no_open, public=args.public,
+        viz = VizServer(brain, port=args.port, open_browser=not args.no_open, public=args.public, tick_delay=0.004,
                         tunnel_provider="auto" if args.tunnel in (None, "manual") else args.tunnel,
                         tunnel_enabled=args.tunnel is not None)
         if args.tunnel and args.tunnel != "manual":

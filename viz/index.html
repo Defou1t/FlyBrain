@@ -210,7 +210,7 @@
   <div class="card" id="card-links" data-id="links"><div class="card-h"><span data-i18n="links_title">Decision — softmax</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b" id="links"></div></div>
   <div class="card" id="card-log" data-id="log"><div class="card-h"><span data-i18n="log_title">Log</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b" id="log"></div></div>
 </div>
-<div id="topbtns"><button id="langbtn" title="language">EN</button><button id="arcadebtn" data-i18n="arcade_btn">⬢ arcade view</button><button id="layoutbtn" data-i18n="layout_btn" data-i18n-title="layout_title">↺ layout</button></div>
+<div id="topbtns"><button id="litebtn" data-i18n-title="lite_title">⚡</button><button id="langbtn" title="language">EN</button><button id="arcadebtn" data-i18n="arcade_btn">⬢ arcade view</button><button id="layoutbtn" data-i18n="layout_btn" data-i18n-title="layout_title">↺ layout</button></div>
 <button id="enterbtn" data-i18n="enter_btn">Enter the game →</button>
 <div id="hud"><h1>FlyBrain <span style="color:#4d4d4d;font-weight:400">·</span> <b>BETKING</b></h1><div class="slot" id="hud-slot">…</div>
   <div class="row"><span data-i18n="bank">bank FUN</span><b id="hud-bank">—</b></div>
@@ -274,6 +274,7 @@ const I18N = {
     dopa_empty: 'dopamine per spin (bars), appetite and bank (lines) — history survives page reloads',
     ds_spins: 'spins', ds_hit: 'hit rate', ds_dopa: 'Σ dopamine', ds_net: 'net', ds_desire: 'appetite', ds_corr: 'appetite↔bank corr.',
     lang_switched: 'language: English',
+    lite_title: 'lite mode: lower detail for weaker graphics cards (auto when the page runs slowly)', lite_on: 'lite mode on: fewer pixels, no fur / halo, video at 30 fps', lite_off: 'lite mode off',
     arcade_btn: '⬢ arcade view', enter_btn: 'Enter the game →', gear_machine: '🎰 the machine', hud_watching: 'watching the reels', hud_win: 'last spin: +{0} FUN (dopamine +{1})', hud_loss: 'last spin: {0} FUN (dopamine {1})',
   },
   uk: {
@@ -311,6 +312,7 @@ const I18N = {
     dopa_empty: 'дофамін за спін (стовпчики), азарт і банк (лінії) — історія переживає перезавантаження сторінки',
     ds_spins: 'спінів', ds_hit: 'частота виграшів', ds_dopa: 'Σ дофамін', ds_net: 'підсумок', ds_desire: 'азарт', ds_corr: 'кореляція азарт↔банк',
     lang_switched: 'мова: українська',
+    lite_title: 'полегшений режим: менше деталей для слабких відеокарт (автоматично, якщо сторінка гальмує)', lite_on: 'полегшений режим: менше пікселів, без ворсинок / сяйва, відео 30 к/с', lite_off: 'полегшений режим вимкнено',
     arcade_btn: '⬢ зал автоматів', enter_btn: 'Увійти в гру →', gear_machine: '🎰 автомат', hud_watching: 'дивиться на барабани', hud_win: 'останній спін: +{0} FUN (дофамін +{1})', hud_loss: 'останній спін: {0} FUN (дофамін {1})',
   },
 };
@@ -408,7 +410,7 @@ function onLayoutChanged(save = true) { if (window.layout) { layout(); fitOverla
 // World units == CSS pixels on the z=0 plane, origin at the viewport centre, y up: the fly lands on real DOM boxes.
 const glCanvas = $('gl');
 const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio((() => { try { return localStorage.getItem('fly.lite') === '1' ? 1 : Math.min(devicePixelRatio, 2); } catch (e) { return Math.min(devicePixelRatio, 2); } })());
 renderer.setClearColor(0x000000, 0);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(40, 1, 10, 20000);
@@ -506,7 +508,7 @@ async function loadBrain() {
   haloPrev = new Uint8Array(HN); haloCur = new Uint8Array(HN); haloIdx = hidx;
   hgeo.setAttribute('position', new THREE.BufferAttribute(hp, 3)); hgeo.setAttribute('aBase', new THREE.BufferAttribute(hb, 3)); hgeo.setAttribute('aGroup', new THREE.BufferAttribute(hg, 1));
   hgeo.setAttribute('aPrev', new THREE.BufferAttribute(haloPrev, 1, true)); hgeo.setAttribute('aCur', new THREE.BufferAttribute(haloCur, 1, true));
-  halo = new THREE.Points(hgeo, haloMat); points = new THREE.Points(geo, brainMat);
+  halo = new THREE.Points(hgeo, haloMat); points = new THREE.Points(geo, brainMat); if (lite) { halo.visible = false; brainMat.uniforms.uPixelRatio.value = haloMat.uniforms.uPixelRatio.value = 1; }
   geo.computeBoundingBox(); brainMid = (geo.boundingBox.min.y + geo.boundingBox.max.y) / 2;
   { let lo = 1e9, hi = -1e9; for (let i = 0; i < N; i++) { const y = posArr[i * 3 + 1]; if (y < NECK) continue; if (y < lo) lo = y; if (y > hi) hi = y; } brainTop = (lo + hi) / 2; }   // centre of the brain proper (above the neck)
   brainGroup.add(halo); brainGroup.add(points);
@@ -663,7 +665,7 @@ function addFur(mesh, length, shells, color, density) {
         'float hash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n' +
         'void main() { float h = hash(floor(vP * uDensity)); float keep = step(0.84 + 0.14 * uF, h); if (keep < 0.5) discard; float a = (1.0 - uF * 0.7) * 0.42;\n' +
         '  float l = 0.5 + 0.5 * max(0.0, dot(normalize(vN), normalize(vec3(-0.4, 0.8, 0.6)))); gl_FragColor = vec4(uColor * l * (0.55 + 0.45 * uF), a); }' });
-    const sm = new THREE.Mesh(mesh.geometry, m); sm.renderOrder = 3 + k; mesh.add(sm);
+    const sm = new THREE.Mesh(mesh.geometry, m); sm.renderOrder = 3 + k; mesh.add(sm); furMeshes.push(sm); if (lite) sm.visible = false;
   }
 }
 new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
@@ -881,14 +883,30 @@ const live = $('live'), shot = $('shot');
 let liveOk = false;
 live.onload = () => { liveOk = true; live.style.display = 'block'; };          // first frame of the stream decoded
 live.onerror = () => { liveOk = false; live.style.display = 'none'; setTimeout(() => { live.src = '/stream.mjpg?' + Date.now(); }, 3000); };
-live.src = '/stream.mjpg';
-setInterval(() => { $('fps').textContent = liveOk ? 'live' + (liveFps >= 1 ? ' · ' + liveFps.toFixed(0) + ' fps' : '') : ''; }, 1000);
-let liveFps = 0;
-// MJPEG exposes no frame event: estimate the rate from an 8x8 canvas diff sampled every animation frame
-const probeC = document.createElement('canvas'); probeC.width = probeC.height = 8; const probeX = probeC.getContext('2d', { willReadFrequently: true });
-let probePrev = null, probeCnt = 0, probeT = performance.now();
-(function probeLive() { requestAnimationFrame(probeLive); if (!liveOk) return; try { probeX.drawImage(live, 0, 0, 8, 8); const d = probeX.getImageData(0, 0, 8, 8).data; let diff = 0; if (probePrev) for (let i = 0; i < d.length; i += 4) diff += Math.abs(d[i] - probePrev[i]); if (!probePrev || diff > 0) probeCnt++; probePrev = d; } catch (e) {}
-  const nowT = performance.now(); if (nowT - probeT > 1000) { liveFps = probeCnt * 1000 / (nowT - probeT); probeCnt = 0; probeT = nowT; } })();
+// ---- lite mode for weaker GPUs: pixel ratio 1, no halo, no fur, 30 fps video; auto when frames take > 33 ms
+let lite = false; try { lite = localStorage.getItem('fly.lite') === '1'; } catch (e) {}
+const furMeshes = [];
+function applyLite(on, say) {
+  lite = on; try { localStorage.setItem('fly.lite', on ? '1' : '0'); } catch (e) {}
+  renderer.setPixelRatio(on ? 1 : Math.min(devicePixelRatio, 2));
+  if (brainMat) brainMat.uniforms.uPixelRatio.value = haloMat.uniforms.uPixelRatio.value = on ? 1 : Math.min(devicePixelRatio, 2);
+  if (halo) halo.visible = !on;
+  furMeshes.forEach(m => m.visible = !on);
+  $('litebtn').classList.toggle('on', on);
+  const want = on ? '/stream.mjpg?fps=30' : '/stream.mjpg'; if (!live.src.endsWith(want)) { liveOk = false; live.src = want; }
+  resize();
+  if (say) log(on ? t('lite_on') : t('lite_off'));
+}
+$('litebtn').onclick = () => applyLite(!lite, true);
+let slowFrames = 0, autoLiteDone = false;
+function watchFrameTime(dt) {   // called from the animation loop: 3 s of > 33 ms frames -> lite (once, unless the user turned it off)
+  if (lite || autoLiteDone || document.hidden) return;
+  slowFrames = dt > 0.033 ? slowFrames + 1 : Math.max(0, slowFrames - 2);
+  if (slowFrames > 90) { autoLiteDone = true; applyLite(true, true); }
+}
+live.src = lite ? '/stream.mjpg?fps=30' : '/stream.mjpg';
+let liveFps = 0;   // frames/s the fly's browser produces (server-side count; a canvas readback here would stall weak GPUs)
+setInterval(() => { $('fps').textContent = liveOk ? 'live' + (liveFps >= 1 ? ' · ' + liveFps.toFixed(0) + ' fps' : '') + (lite ? ' · lite' : '') : ''; }, 1000);
 function fitOverlay() {
   const r = overlay.getBoundingClientRect(); if (!r.width) return;
   const dpr = Math.min(devicePixelRatio, 2);
@@ -1046,6 +1064,7 @@ es.onmessage = ev => {
     } else if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(t('log_reward_neg', m.r.toFixed(1)), 'bad'); }
     else { pamFlash = 1; flash('rgba(94,226,154,0.25)'); log(t('log_reward_pos', m.r.toFixed(1)), 'ok'); }
   } else if (m.t === 'public') { if (window.showRemote) showRemote(m.on, m.lan_url, m.tunnel_url); }
+  else if (m.t === 'stat') { liveFps = m.cast || 0; }
   else if (m.t === 'reset') { dopa.length = 0; total = 0; $('s-ret').textContent = '0'; drawDopa(); log(t('reset_done'), 'act'); }
   else if (m.t === 'reload') location.reload();
   else if (m.t === 'state') applyState(m);
@@ -1069,9 +1088,9 @@ let lastDpr = devicePixelRatio;
 function animate(now) {
   requestAnimationFrame(animate);
   if (innerWidth !== W || innerHeight !== H || devicePixelRatio !== lastDpr) {   // missed resize / zoom / DPI change
-    lastDpr = devicePixelRatio; renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); if (brainMat) brainMat.uniforms.uPixelRatio.value = haloMat.uniforms.uPixelRatio.value = Math.min(devicePixelRatio, 2); if (!manualLayout) applyLayout(defaultLayout()); resize();
+    lastDpr = devicePixelRatio; const pr = lite ? 1 : Math.min(devicePixelRatio, 2); renderer.setPixelRatio(pr); if (brainMat) brainMat.uniforms.uPixelRatio.value = haloMat.uniforms.uPixelRatio.value = pr; if (!manualLayout) applyLayout(defaultLayout()); resize();
   }
-  const t0 = now / 1000, dt = Math.min(0.05, (now - lastNow) / 1000 || 0.016), fs = flyState; lastNow = now;
+  const t0 = now / 1000, dt = Math.min(0.05, (now - lastNow) / 1000 || 0.016), fs = flyState; watchFrameTime((now - lastNow) / 1000); lastNow = now;
   let grounded = false, landing = 0, walking = false, smoking = false;
   if (fs.mode === 'fly') {
     if (fs.targetBox) { const [sx, sy] = linkScreen(fs.targetBox); fs.target.set(sx - W / 2, H / 2 - sy, 6); }   // follow the box if the card moved
