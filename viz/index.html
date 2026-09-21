@@ -123,7 +123,24 @@
   #dopastats { display:flex; gap:12px; font-size:10.5px; color:var(--dim); padding:4px 2px 0; font-family:Consolas, monospace; flex-wrap:wrap; }
   #dopastats b { color:var(--fg); font-weight:500; }
 
-  #gl { position:fixed; left:0; top:0; width:100vw; height:100vh; pointer-events:none; z-index:10; }   /* explicit size: with Windows scaling (DPR 1.25/1.5) the backing store is bigger than the window and would stretch the canvas */
+  #gl { position:fixed; left:0; top:0; width:100vw; height:100vh; pointer-events:none; z-index:10; }
+  /* arcade view: the fly sits in front of a slot cabinet in a dark room; the cards are hidden */
+  body.arcade #desk, body.arcade #hint, body.arcade #layoutbtn { display:none; }
+  body.arcade #gl { z-index:1; pointer-events:auto; }
+  #enterbtn { position:fixed; left:50%; bottom:34px; transform:translateX(-50%); z-index:20; display:none; background:rgba(12,16,26,.85); color:var(--fg); border:1px solid #3a4a7a; border-radius:24px; padding:11px 26px; font-size:15px; letter-spacing:.3px; cursor:pointer; box-shadow:0 10px 40px rgba(0,0,0,.6), 0 0 0 1px rgba(87,214,255,.15) inset; backdrop-filter:blur(6px); }
+  #enterbtn:hover { border-color:var(--cyan); color:#fff; }
+  body.arcade #enterbtn { display:block; }
+  #hud { position:fixed; left:18px; top:14px; z-index:20; display:none; flex-direction:column; gap:6px; min-width:250px; background:rgba(10,13,22,.66); border:1px solid var(--line); border-radius:12px; padding:10px 14px; backdrop-filter:blur(6px); }
+  body.arcade #hud { display:flex; }
+  #hud h1 { margin:0; font-size:14px; font-weight:600; letter-spacing:.4px; }
+  #hud .row { display:flex; justify-content:space-between; gap:12px; font-size:12px; color:var(--dim); }
+  #hud .row b { color:var(--fg); font-weight:500; font-family:Consolas, monospace; }
+  #hud .grp { grid-template-columns:70px 1fr 40px; }
+  #hud .last { font-size:11.5px; color:var(--dim); }
+  #hud .last.ok { color:var(--ok); } #hud .last.bad { color:var(--bad); }
+  #hud .slot { font-size:11.5px; color:var(--cyan); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:300px; }
+  #arcadebtn { display:inline-block; }
+  body.arcade #arcadebtn { display:none; }   /* explicit size: with Windows scaling (DPR 1.25/1.5) the backing store is bigger than the window and would stretch the canvas */
   #flash { position:fixed; inset:0; pointer-events:none; opacity:0; transition:opacity .25s; z-index:5; }
   #wait { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); color:var(--dim); font-size:14px; z-index:6; background:rgba(6,8,14,.85); padding:8px 14px; border-radius:6px; }
   /* first run: your own session cookie */
@@ -187,7 +204,13 @@
   <div class="card" id="card-links" data-id="links"><div class="card-h"><span data-i18n="links_title">Decision — softmax</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b" id="links"></div></div>
   <div class="card" id="card-log" data-id="log"><div class="card-h"><span data-i18n="log_title">Log</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b" id="log"></div></div>
 </div>
-<div id="topbtns"><button id="langbtn" title="language">EN</button><button id="layoutbtn" data-i18n="layout_btn" data-i18n-title="layout_title">↺ layout</button></div>
+<div id="topbtns"><button id="langbtn" title="language">EN</button><button id="arcadebtn" data-i18n="arcade_btn">⬢ arcade view</button><button id="layoutbtn" data-i18n="layout_btn" data-i18n-title="layout_title">↺ layout</button></div>
+<button id="enterbtn" data-i18n="enter_btn">Enter the game →</button>
+<div id="hud"><h1>FlyBrain</h1><div class="slot" id="hud-slot">…</div>
+  <div class="row"><span data-i18n="bank">bank FUN</span><b id="hud-bank">—</b></div>
+  <div class="grp"><span data-i18n="appetite">appetite</span><div class="b"><i id="hud-desire" style="background:linear-gradient(90deg,#ff5c7a,#ffd93b,#5ee29a)"></i></div><span class="v" id="hud-desire-v">—</span></div>
+  <div class="row"><span data-i18n="ds_dopa">Σ dopamine</span><b id="hud-dopa">—</b></div>
+  <div class="last" id="hud-last"></div></div>
 <div id="hint" data-i18n-html="hint"><b>cards</b> drag by the header, resize by the corner, snap to each other · ⤢ maximize</div>
 <div id="gear"><div class="gear-title" data-i18n="gear_title">⚙ the fly</div><button id="g-anim"></button><button id="g-pause"></button><button id="g-mode"></button><button id="g-refill" style="display:none" data-i18n="g_refill">Give 50 000 FUN</button><hr><button id="g-session" data-i18n="g_session">Use my own account (PHPSESSID)…</button><button id="g-reset" class="danger" data-i18n="g_reset">Reset results &amp; memory…</button></div>
 <div id="flash"></div>
@@ -244,6 +267,7 @@ const I18N = {
     dopa_empty: 'dopamine per spin (bars), appetite and bank (lines) — history survives page reloads',
     ds_spins: 'spins', ds_hit: 'hit rate', ds_dopa: 'Σ dopamine', ds_net: 'net', ds_desire: 'appetite', ds_corr: 'appetite↔bank corr.',
     lang_switched: 'language: English',
+    arcade_btn: '⬢ arcade view', enter_btn: 'Enter the game →', hud_watching: 'watching the reels', hud_win: 'last spin: +{0} FUN (dopamine +{1})', hud_loss: 'last spin: {0} FUN (dopamine {1})',
   },
   uk: {
     brain_title: 'Мозок мухи · MaleCNS', maximize: 'розгорнути', rotate_brain: 'тягніть, щоб обертати', l_rest: 'спокій', l_stim: 'стимульовані', l_fire: 'спайки',
@@ -279,6 +303,7 @@ const I18N = {
     dopa_empty: 'дофамін за спін (стовпчики), азарт і банк (лінії) — історія переживає перезавантаження сторінки',
     ds_spins: 'спінів', ds_hit: 'частота виграшів', ds_dopa: 'Σ дофамін', ds_net: 'підсумок', ds_desire: 'азарт', ds_corr: 'кореляція азарт↔банк',
     lang_switched: 'мова: українська',
+    arcade_btn: '⬢ зал автоматів', enter_btn: 'Увійти в гру →', hud_watching: 'дивиться на барабани', hud_win: 'останній спін: +{0} FUN (дофамін +{1})', hud_loss: 'останній спін: {0} FUN (дофамін {1})',
   },
 };
 let LANG = 'en';
@@ -387,6 +412,7 @@ function resize() {
   W = innerWidth; H = innerHeight;
   renderer.setSize(W, H, false);
   camera.aspect = W / H; camera.updateProjectionMatrix();
+  arcadeCam.aspect = W / H; arcadeCam.updateProjectionMatrix();
   camera.position.set(0, 0, (H / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   camera.lookAt(0, 0, 0);
   if (brainMat) brainMat.uniforms.uCamZ.value = camera.position.z;
@@ -403,12 +429,13 @@ const GROUP_COL = [[0.55, 0.58, 0.7], [0.30, 0.55, 1.0], [0.71, 0.48, 1.0], [0.3
 const GROUP_CSS = ['#8c93b3', '#4d8dff', '#b57bff', '#4de08a', '#ffb347', '#ff5c5c', '#57f0ff', '#ff4dd2', '#ffd93b'];
 const brainGroup = new THREE.Group(); scene.add(brainGroup);
 let N = 0, base = null, actPrev = null, actCur = null, actBytes = null, actSlow = null, groupArr = null, points = null, halo = null, posArr = null, dopaFlash = 0, pamFlash = 0;
-let brainMat = null, haloMat = null, lastAct = 0, actGap = 0.1, haloPrev = null, haloCur = null, haloIdx = null, brainMid = 0;
+let brainMat = null, haloMat = null, lastAct = 0, actGap = 0.1, haloPrev = null, haloCur = null, haloIdx = null, brainMid = 0, brainTop = 0;
+const NECK = -0.18;   // normalised y where the brain ends and the ventral nerve cord begins
 let readoutPos = [], nDescending = 512, groupIdx = [], groupMean = [];
 const spin = { x: 0.15, y: 0, drag: null, idle: 0 };
 const VERT = `
   attribute vec3 aBase; attribute float aGroup; attribute float aPrev; attribute float aCur;
-  uniform float uMix, uSize, uCamZ, uPixelRatio, uDopa, uPam, uHalo; uniform float uBoost[9];
+  uniform float uMix, uSize, uCamZ, uPixelRatio, uDopa, uPam, uHalo, uHideBelow; uniform float uBoost[9];
   varying vec3 vColor; varying float vAlpha;
   void main() {
     float a = mix(aPrev, aCur, uMix);
@@ -427,8 +454,9 @@ const VERT = `
     vAlpha = uHalo > 0.5 ? 0.012 + 0.05 * a : 0.16 + 0.6 * a;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     float s = uSize * (uHalo > 0.5 ? 3.2 + 2.0 * a : 0.8 + 1.8 * a) * uPixelRatio * (uCamZ / max(1.0, -mv.z));
-    gl_PointSize = s;
-    gl_Position = projectionMatrix * mv;
+    bool hide = position.y < uHideBelow;          // arcade view: the brain alone, no nerve cord hanging below it
+    gl_PointSize = hide ? 0.0 : s;
+    gl_Position = hide ? vec4(0.0, 0.0, 2.0, 1.0) : projectionMatrix * mv;
   }`;
 const FRAG = `
   varying vec3 vColor; varying float vAlpha;
@@ -440,7 +468,7 @@ const FRAG = `
 function makeMat(haloLayer) {
   // neurons: normal (premultiplied) blending so dense regions do not wash out to white; halo: additive glow
   return new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, depthTest: false, premultipliedAlpha: true, blending: haloLayer ? THREE.AdditiveBlending : THREE.NormalBlending,
-    uniforms: { uMix: { value: 1 }, uSize: { value: 1.8 }, uCamZ: { value: 1000 }, uPixelRatio: { value: Math.min(devicePixelRatio, 2) }, uDopa: { value: 0 }, uPam: { value: 0 }, uHalo: { value: haloLayer ? 1 : 0 }, uBoost: { value: new Array(9).fill(0) } } });
+    uniforms: { uMix: { value: 1 }, uSize: { value: 1.8 }, uCamZ: { value: 1000 }, uPixelRatio: { value: Math.min(devicePixelRatio, 2) }, uDopa: { value: 0 }, uPam: { value: 0 }, uHalo: { value: haloLayer ? 1 : 0 }, uHideBelow: { value: -9 }, uBoost: { value: new Array(9).fill(0) } } });
 }
 async function loadBrain() {
   const meta = await (await fetch('/meta.json')).json();
@@ -471,6 +499,7 @@ async function loadBrain() {
   hgeo.setAttribute('aPrev', new THREE.BufferAttribute(haloPrev, 1, true)); hgeo.setAttribute('aCur', new THREE.BufferAttribute(haloCur, 1, true));
   halo = new THREE.Points(hgeo, haloMat); points = new THREE.Points(geo, brainMat);
   geo.computeBoundingBox(); brainMid = (geo.boundingBox.min.y + geo.boundingBox.max.y) / 2;
+  { let lo = 1e9, hi = -1e9; for (let i = 0; i < N; i++) { const y = posArr[i * 3 + 1]; if (y < NECK) continue; if (y < lo) lo = y; if (y > hi) hi = y; } brainTop = (lo + hi) / 2; }   // centre of the brain proper (above the neck)
   brainGroup.add(halo); brainGroup.add(points);
   $('hudline').textContent = `${meta.total.toLocaleString(LANG === 'uk' ? 'uk' : 'en')} ${t('neurons')} · ${meta.synapses.toLocaleString(LANG === 'uk' ? 'uk' : 'en')} ${t('synapses')}`;
   buildGroups();
@@ -546,9 +575,9 @@ function applyState(s) {
   if (flyCtl.broke) setFlyLabel(t('fly_smoke')); else if (flyCtl.paused) setFlyLabel(t('fly_shooed')); else if (flyCtl.mode === 'casino') setFlyLabel(t('fly_slots')); else setFlyLabel(t('fly_look'));
 }
 const flyScreen = new THREE.Vector3();
-function flyOnScreen() { flyScreen.copy(flyRoot.position).project(camera); return [(flyScreen.x + 1) / 2 * W, (1 - flyScreen.y) / 2 * H]; }
-addEventListener('mousemove', e => { if (!isLocal || !fly.ready) return; const [fx, fy] = flyOnScreen(), r = Math.min(120, flyRoot.scale.x * fly.len * 0.5); glCanvas.classList.toggle('hit', Math.hypot(e.clientX - fx, e.clientY - fy) < r); });
-glCanvas.addEventListener('click', e => { const g = $('gear'); if (g.style.display === 'flex') { g.style.display = 'none'; return; } g.style.display = 'flex'; g.style.left = Math.min(W - 250, e.clientX + 12) + 'px'; g.style.top = Math.min(H - 260, e.clientY - 20) + 'px'; });
+function flyOnScreen() { flyScreen.copy(flyRoot.position).project(view === 'arcade' ? arcadeCam : camera); return [(flyScreen.x + 1) / 2 * W, (1 - flyScreen.y) / 2 * H]; }
+addEventListener('mousemove', e => { if (!isLocal || !fly.ready) return; const [fx, fy] = flyOnScreen(), r = view === 'arcade' ? 90 : Math.min(120, flyRoot.scale.x * fly.len * 0.5); glCanvas.classList.toggle('hit', Math.hypot(e.clientX - fx, e.clientY - fy) < r); });
+glCanvas.addEventListener('click', e => { if (view === 'arcade' && !glCanvas.classList.contains('hit')) return; const g = $('gear'); if (g.style.display === 'flex') { g.style.display = 'none'; return; } g.style.display = 'flex'; g.style.left = Math.min(W - 250, e.clientX + 12) + 'px'; g.style.top = Math.min(H - 260, e.clientY - 20) + 'px'; });
 addEventListener('pointerdown', e => { if (!e.target.closest('#gear') && e.target !== glCanvas) $('gear').style.display = 'none'; });
 async function cmd(do_) { $('gear').style.display = 'none'; const r = await (await fetch('/admin/cmd?do=' + do_)).json(); log(t('log_cmd', do_), 'act'); return r; }
 $('g-anim').onclick = () => { flyCtl.anim = flyCtl.anim === 'walk' ? 'fly' : 'walk'; try { localStorage.setItem('fly.anim', flyCtl.anim); } catch (e) {} applyState(flyCtl); log(flyCtl.anim === 'walk' ? t('log_walk') : t('log_fly')); };
@@ -572,14 +601,41 @@ const envMap = (() => {
   }
   const t = new THREE.CubeTexture(faces); t.needsUpdate = true; return t;
 })();
+// Drosophila colours: a dusty tan thorax with faint dark stripes, a lighter abdomen with black bands on
+// its rear half (tergites), deep red compound eyes, dark legs. Matte, slightly velvety - no bee yellow,
+// no wasp gloss. Patterns are procedural (the model has no UVs): stripes by position, fur as shells.
 const MAT = {
-  thorax: new THREE.MeshPhysicalMaterial({ color: 0xa8683a, roughness: 0.68, metalness: 0.02, clearcoat: 0.18, clearcoatRoughness: 0.55, sheen: new THREE.Color(0x3a2a18), envMap, envMapIntensity: 0.45 }),
-  body:   new THREE.MeshPhysicalMaterial({ color: 0xc08f42, roughness: 0.7, metalness: 0.02, clearcoat: 0.15, clearcoatRoughness: 0.6, sheen: new THREE.Color(0x42301a), envMap, envMapIntensity: 0.4 }),
-  eyes:   new THREE.MeshPhysicalMaterial({ color: 0xc41f2c, emissive: 0x3a0507, roughness: 0.22, metalness: 0.05, clearcoat: 1.0, clearcoatRoughness: 0.1, envMap, envMapIntensity: 1.0 }),
+  thorax: new THREE.MeshPhysicalMaterial({ color: 0xa8845c, roughness: 0.82, metalness: 0.0, clearcoat: 0.06, clearcoatRoughness: 0.8, sheen: new THREE.Color(0x2a1d12), envMap, envMapIntensity: 0.25 }),
+  body:   new THREE.MeshPhysicalMaterial({ color: 0xc8a473, roughness: 0.8, metalness: 0.0, clearcoat: 0.08, clearcoatRoughness: 0.7, sheen: new THREE.Color(0x2e2115), envMap, envMapIntensity: 0.25 }),
+  eyes:   new THREE.MeshPhysicalMaterial({ color: 0xa8161f, emissive: 0x2a0406, roughness: 0.35, metalness: 0.0, clearcoat: 0.9, clearcoatRoughness: 0.25, envMap, envMapIntensity: 0.8 }),
   wing:   new THREE.MeshPhysicalMaterial({ color: 0xe6f4ff, transparent: true, opacity: 0.34, roughness: 0.1, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false, envMap, envMapIntensity: 1.3 }),
   wingGhost: new THREE.MeshBasicMaterial({ color: 0xdfeeff, transparent: true, opacity: 0.09, side: THREE.DoubleSide, depthWrite: false }),
-  legs:   new THREE.MeshStandardMaterial({ color: 0x3f2e1f, roughness: 0.85, metalness: 0.02 }),
+  legs:   new THREE.MeshStandardMaterial({ color: 0x2f2318, roughness: 0.9, metalness: 0.0 }),
 };
+// stripes: dark bands along the body axis behind z0 (the abdomen), thin faint ones on the thorax
+function stripe(mat, z0, freq, dark, spread) {
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uZ0 = { value: z0 }; sh.uniforms.uFreq = { value: freq }; sh.uniforms.uDark = { value: dark }; sh.uniforms.uSpread = { value: spread };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vObjPos;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvObjPos = position;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vObjPos; uniform float uZ0, uFreq, uDark, uSpread;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\n{ float rear = smoothstep(0.0, uSpread, uZ0 - vObjPos.z); float band = smoothstep(0.1, 0.6, sin((vObjPos.z - uZ0) * uFreq)); float side = 1.0 - 0.35 * smoothstep(0.2, 0.9, abs(normalize(vObjPos - vec3(0.0, vObjPos.y, vObjPos.z)).x)); diffuseColor.rgb *= mix(1.0, uDark, rear * band); diffuseColor.rgb *= 0.9 + 0.1 * side; }');
+  };
+  mat.needsUpdate = true;
+}
+// fur: shells of the same geometry pushed out along the normals, each keeping a random subset of cells
+function addFur(mesh, length, shells, color, density) {
+  for (let k = 1; k <= shells; k++) {
+    const f = k / shells;
+    const m = new THREE.ShaderMaterial({ transparent: true, depthWrite: false,
+      uniforms: { uOff: { value: f * length }, uF: { value: f }, uColor: { value: new THREE.Color(color) }, uDensity: { value: density } },
+      vertexShader: 'uniform float uOff; varying vec3 vN; varying vec3 vP; void main() { vN = normalize(normalMatrix * normal); vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position + normal * uOff, 1.0); }',
+      fragmentShader: 'uniform float uF, uDensity; uniform vec3 uColor; varying vec3 vN; varying vec3 vP;\n' +
+        'float hash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n' +
+        'void main() { float h = hash(floor(vP * uDensity)); float keep = step(0.84 + 0.14 * uF, h); if (keep < 0.5) discard; float a = (1.0 - uF * 0.7) * 0.42;\n' +
+        '  float l = 0.5 + 0.5 * max(0.0, dot(normalize(vN), normalize(vec3(-0.4, 0.8, 0.6)))); gl_FragColor = vec4(uColor * l * (0.55 + 0.45 * uF), a); }' });
+    const sm = new THREE.Mesh(mesh.geometry, m); sm.renderOrder = 3 + k; mesh.add(sm);
+  }
+}
 new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
   const model = gltf.scene; let legsMesh = null, bodyMesh = null;
   model.traverse(o => { if (!o.isMesh) return; const n = o.name.toLowerCase();
@@ -588,6 +644,12 @@ new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
   model.updateMatrixWorld(true);
   const thorax = model.getObjectByName('thorax'), tc = new THREE.Vector3();
   if (thorax) new THREE.Box3().setFromObject(thorax).getCenter(tc);
+  const bbAll = new THREE.Box3().setFromObject(model), L = bbAll.max.z - bbAll.min.z;
+  // abdomen bands behind the thorax, faint thorax stripes, fur on both
+  stripe(MAT.body, tc.z - L * 0.06, 2 * Math.PI * 4.5 / Math.max(0.01, tc.z - bbAll.min.z), 0.38, L * 0.12);
+  stripe(MAT.thorax, tc.z + L * 0.4, 2 * Math.PI * 3.0 / (L * 0.3), 0.72, L * 0.6);
+  if (thorax) addFur(thorax, L * 0.024, 4, 0xd9bc92, 200 / L);
+  if (bodyMesh) addFur(bodyMesh, L * 0.012, 3, 0xcfae82, 260 / L);
   fly.wings = fly.wings.map(({ mesh, s }) => {
     const bb = new THREE.Box3().setFromObject(mesh);
     const hinge = new THREE.Vector3(s < 0 ? bb.max.x : bb.min.x, bb.max.y, bb.max.z); hinge.x = tc.x + s * 0.12; hinge.y = Math.min(hinge.y, tc.y + 0.25);
@@ -611,7 +673,7 @@ new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
   const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
   model.position.sub(tc);                    // origin = thorax, so the body sits exactly on the landing point
   fly.len = Math.max(size.x, size.y, size.z); fly.model = model; flyRoot.add(model); fly.ready = true;
-  layout();
+  if (view === 'arcade') flyRoot.scale.setScalar(0.72 / fly.len); else layout();
 }, undefined, err => { console.warn('drosophila.glb failed', err); const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), MAT.body); m.scale.set(1, 0.8, 1.6); flyRoot.add(m); fly.len = 3.2; fly.ready = true; layout(); });
 
 // smoke: a small pool of soft sprites rising from the ember
@@ -635,6 +697,7 @@ function takeOff() { if (flyState.mode === 'landed') flyTo(flyState.home.clone()
 
 // layout: brain pinned to its card, fly home to its card (viewport coordinates)
 function layout() {
+  if (view === 'arcade') return;
   const b = $('card-brain').getBoundingClientRect(), f = $('card-fly').getBoundingClientRect();
   // the cloud spans ~0.95 x 1.3 units (brain + VNC below it): fit that into the card and centre it
   const S = Math.min((b.height - 44) * 0.68, b.width * 0.85);
@@ -647,6 +710,67 @@ function layout() {
 }
 addEventListener('resize', () => { if (!manualLayout) applyLayout(defaultLayout()); resize(); });
 addEventListener('scroll', () => { layout(); fitOverlay(); }, { passive: true });
+
+// ================================================================== arcade view: a dark hall, a slot cabinet, the fly in front of it
+// Metres-ish units, its own camera; the fly and the brain are moved between the two scenes.
+const arcade = new THREE.Scene();
+arcade.fog = new THREE.Fog(0x06080e, 6, 16);
+const arcadeCam = new THREE.PerspectiveCamera(38, 1, 0.05, 100);
+let view = 'desktop';
+try { view = localStorage.getItem('fly.view') || 'arcade'; } catch (e) { view = 'arcade'; }
+const vidCanvas = document.createElement('canvas'); vidCanvas.width = 800; vidCanvas.height = 500; const vctx = vidCanvas.getContext('2d');
+vctx.fillStyle = '#101625'; vctx.fillRect(0, 0, 800, 500);
+const vidTex = new THREE.CanvasTexture(vidCanvas); vidTex.minFilter = THREE.LinearFilter;
+const cabinet = new THREE.Group(); arcade.add(cabinet);
+{
+  const dark = new THREE.MeshStandardMaterial({ color: 0x151a2b, roughness: 0.55, metalness: 0.35 });
+  const trim = new THREE.MeshStandardMaterial({ color: 0x0c1020, roughness: 0.4, metalness: 0.6, emissive: 0x1b2a66, emissiveIntensity: 0.6 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.05, 0.7), dark); body.position.set(0, 0.525, 0); cabinet.add(body);
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 0.5), trim); deck.position.set(0, 1.09, 0.1); deck.rotation.x = -0.28; cabinet.add(deck);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.95, 0.42), dark); head.position.set(0, 1.62, -0.14); head.rotation.x = -0.12; cabinet.add(head);
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.98, 0.6125), new THREE.MeshBasicMaterial({ map: vidTex, toneMapped: false })); screen.position.set(0, 1.62, 0.075); screen.rotation.x = -0.12; cabinet.add(screen);
+  const bezel = new THREE.Mesh(new THREE.PlaneGeometry(1.04, 0.68), new THREE.MeshStandardMaterial({ color: 0x05070c, roughness: 0.3, metalness: 0.5 })); bezel.position.set(0, 1.62, 0.07); bezel.rotation.x = -0.12; cabinet.add(bezel);
+  const marquee = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.16, 0.44), trim); marquee.position.set(0, 2.16, -0.14); cabinet.add(marquee);
+  const ledge = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.05, 0.36), trim); ledge.position.set(0, 1.14, 0.3); cabinet.add(ledge);
+  for (let i = 0; i < 3; i++) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 20), new THREE.MeshStandardMaterial({ color: [0xff5c5c, 0xffd93b, 0x5ee29a][i], emissive: [0xff5c5c, 0xffd93b, 0x5ee29a][i], emissiveIntensity: 0.5, roughness: 0.4 })); b.position.set(-0.25 + i * 0.25, 1.17, 0.36); cabinet.add(b); }
+  const glow = new THREE.PointLight(0x7fb0ff, 1.4, 4, 2); glow.position.set(0, 1.7, 0.6); cabinet.add(glow); cabinet.userData.glow = glow;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x0a0d18, roughness: 0.9, metalness: 0.1 })); floor.rotation.x = -Math.PI / 2; arcade.add(floor);
+  const grid = new THREE.GridHelper(40, 80, 0x22305a, 0x141c33); grid.position.y = 0.002; arcade.add(grid);
+  arcade.add(new THREE.HemisphereLight(0x8fa8ff, 0x1a1208, 0.55));
+  const keyA = new THREE.DirectionalLight(0xfff0dd, 0.9); keyA.position.set(-2, 4, 3); arcade.add(keyA);
+  const rim = new THREE.DirectionalLight(0x57d6ff, 0.35); rim.position.set(3, 2, -3); arcade.add(rim);
+  const warm = new THREE.PointLight(0xffd6a8, 1.6, 3.5, 2); warm.position.set(0.7, 1.9, 1.3); arcade.add(warm);   // a warm lamp on the fly
+}
+const brainLight = new THREE.PointLight(0x9fb4ff, 0.8, 3, 2); brainLight.position.set(0, 2.7, 0.7);
+function setView(v) {
+  view = v; try { localStorage.setItem('fly.view', v); } catch (e) {}
+  document.body.classList.toggle('arcade', v === 'arcade');
+  if (v === 'arcade') {
+    scene.remove(flyRoot); scene.remove(brainGroup); scene.remove(smokePts); arcade.add(flyRoot); arcade.add(brainGroup); arcade.add(brainLight); arcade.add(smokePts);
+    brainGroup.position.set(0, 2.42, 0.25); brainGroup.scale.setScalar(0.62); brainGroup.position.y -= brainTop * 0.62;
+    if (brainMat) { brainMat.uniforms.uCamZ.value = haloMat.uniforms.uCamZ.value = 2.6; brainMat.uniforms.uSize.value = haloMat.uniforms.uSize.value = 2.6; brainMat.uniforms.uHideBelow.value = haloMat.uniforms.uHideBelow.value = NECK; }
+    if (fly.ready) flyRoot.scale.setScalar(0.72 / fly.len);
+    flyState.mode = 'perch';
+  } else {
+    arcade.remove(flyRoot); arcade.remove(brainGroup); arcade.remove(brainLight); arcade.remove(smokePts); scene.add(flyRoot); scene.add(brainGroup); scene.add(smokePts);
+    if (brainMat) { brainMat.uniforms.uCamZ.value = haloMat.uniforms.uCamZ.value = camera.position.z; brainMat.uniforms.uHideBelow.value = haloMat.uniforms.uHideBelow.value = -9; }
+    flyState.mode = flyCtl.broke ? 'smoke' : flyCtl.anim === 'walk' ? 'walk' : 'hover';
+    layout(); fitOverlay(); redrawCharts();
+  }
+}
+$('arcadebtn').onclick = () => setView('arcade');
+$('enterbtn').onclick = () => setView('desktop');
+function updateVideoTexture() {
+  const src = liveOk ? live : (shot.naturalWidth ? shot : null);
+  if (!src) return;
+  try { vctx.drawImage(src, 0, 0, 800, 500); vidTex.needsUpdate = true; } catch (e) {}
+}
+function updateHud(c) {
+  if (!c) return;
+  $('hud-bank').textContent = fmt(c.balance);
+  if (c.drive) { $('hud-desire').style.width = Math.round(c.drive.desire * 100) + '%'; $('hud-desire-v').textContent = Math.round(c.drive.desire * 100) + '%'; $('hud-slot').textContent = c.drive.name || t('hud_watching'); }
+  $('hud-dopa').textContent = (typeof total === 'number' ? total.toFixed(1) : '—');
+}
 
 // ================================================================== browser card: live MJPEG + overlay
 const overlay = $('overlay'), octx = overlay.getContext('2d');
@@ -722,6 +846,7 @@ function showCasino(c, logEvents = false) {
   $('c-bal').textContent = fmt(c.balance); $('c-bet').textContent = fmt(c.bet); $('c-win').textContent = fmt(c.win); $('c-demo').textContent = fmt(c.demo);
   $('c-win').style.color = c.delta > 0 ? 'var(--ok)' : c.delta < 0 ? 'var(--bad)' : '';
   if (c.drive) showDrive(c.drive, c.kind);
+  updateHud(c);
   if (logEvents) (c.events || []).forEach(e => log(`${t('ev')[e.type] || e.type}: ${e.name || ''} ${e.price != null ? '−' + fmt(e.price) + ' → +' + fmt(e.win) : e.pct != null ? (e.pct >= 0 ? '+' : '') + e.pct + '%' : ''}`, e.type === 'bust' || e.type === 'broke' ? 'bad' : e.type === 'switch' ? '' : e.type === 'bonus' ? 'act' : 'ok'));
 }
 function showDrive(d, kind) {
@@ -813,8 +938,8 @@ es.onmessage = ev => {
     total = m.total; $('s-ret').textContent = (total >= 0 ? '+' : '') + total.toFixed(1);
     rewardMarks.push({ i: rateHist.length - 1, r: m.r });
     if (m.casino) { if (m.casino.row) { dopa.push(m.casino.row); if (dopa.length > 5000) dopa.shift(); } drawDopa(); showCasino(m.casino, true); const d = m.casino.delta || 0;
-      if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(t('log_spin_loss', d.toFixed(2), m.r.toFixed(2)), 'bad'); }
-      else if (m.r > 0) { pamFlash = 1; flash('rgba(255,217,59,0.3)'); log(t('log_spin_win', d.toFixed(2), m.r.toFixed(2)), 'ok'); }
+      if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(t('log_spin_loss', d.toFixed(2), m.r.toFixed(2)), 'bad'); $('hud-last').textContent = t('hud_loss', d.toFixed(2), m.r.toFixed(2)); $('hud-last').className = 'last bad'; }
+      else if (m.r > 0) { pamFlash = 1; flash('rgba(255,217,59,0.3)'); log(t('log_spin_win', d.toFixed(2), m.r.toFixed(2)), 'ok'); $('hud-last').textContent = t('hud_win', d.toFixed(2), m.r.toFixed(2)); $('hud-last').className = 'last ok'; }
     } else if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(t('log_reward_neg', m.r.toFixed(1)), 'bad'); }
     else { pamFlash = 1; flash('rgba(94,226,154,0.25)'); log(t('log_reward_pos', m.r.toFixed(1)), 'ok'); }
   } else if (m.t === 'public') { if (window.showRemote) showRemote(m.on, m.lan_url, m.tunnel_url); }
@@ -877,6 +1002,12 @@ function animate(now) {
     tmp2.set(fs.home.x, fs.floor, 6); steer(fs, tmp2, dt, 8, 7, 200);
     flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t0 * 1.3) * 1.5;
     tmp.set(fs.pos.x + 1, fs.pos.y + 0.05, fs.pos.z + 0.55); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp); flyRoot.rotateX(-0.15); qA.copy(flyRoot.quaternion); flyRoot.quaternion.copy(qTarget).slerp(qA, Math.min(1, dt * 5));
+  } else if (fs.mode === 'perch') {   // arcade: sits on the cabinet's ledge, facing the screen, watching the reels
+    grounded = true;
+    fs.pos.set(0.02, 1.27, 0.30); flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t0 * 1.7) * 0.004;
+    tmp.set(fs.pos.x - 0.02, fs.pos.y + 0.2 + Math.sin(t0 * 0.6) * 0.05, fs.pos.z - 0.8); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp); flyRoot.rotateX(0.55 + Math.sin(t0 * 0.9) * 0.05); flyRoot.rotateY(Math.sin(t0 * 0.35) * 0.12);
+    qA.copy(flyRoot.quaternion); flyRoot.quaternion.copy(qTarget).slerp(qA, Math.min(1, dt * 4));
+    if (flyCtl.broke) smoking = true;
   } else if (fs.mode === 'landed') {
     grounded = true; landing = clamp(1 - (now - fs.landedAt) / 350, 0, 1);
     if (fs.targetBox) { const [sx, sy] = linkScreen(fs.targetBox); fs.pos.set(sx - W / 2, H / 2 - sy, 6); }   // stays glued to the element even if its card moves
@@ -902,17 +1033,27 @@ function animate(now) {
     }
   }
   if (ripple) drawOverlay();
+  if (view === 'arcade') {
+    if (fs.mode !== 'perch' && fs.mode !== 'smoke') fs.mode = 'perch';
+    const ang = Math.sin(t0 * 0.11) * 0.6, dist = 2.35 + Math.sin(t0 * 0.07) * 0.2;
+    arcadeCam.position.set(Math.sin(ang) * dist, 1.95 + Math.sin(t0 * 0.13) * 0.1, Math.cos(ang) * dist + 0.3);
+    arcadeCam.lookAt(0, 1.82, 0.1);
+    updateVideoTexture();
+    cabinet.userData.glow.intensity = 1.1 + 0.3 * Math.sin(t0 * 2.3) + 0.2 * Math.sin(t0 * 5.1);
+    if (points) { brainGroup.rotation.set(0.1, t0 * 0.15, 0); }
+  }
   if (points) {
     const u = brainMat.uniforms; u.uMix.value = haloMat.uniforms.uMix.value = lastAct ? clamp((t0 - lastAct) / Math.max(0.03, actGap), 0, 1) : 1;
     if (dopaFlash > 0) dopaFlash = Math.max(0, dopaFlash - 0.02); if (pamFlash > 0) pamFlash = Math.max(0, pamFlash - 0.02);
     u.uDopa.value = haloMat.uniforms.uDopa.value = dopaFlash; u.uPam.value = haloMat.uniforms.uPam.value = pamFlash;
-    if (!spin.drag && ++spin.idle > 60) spin.y += 0.0025; brainGroup.rotation.set(spin.x, spin.y, 0);
+    if (view !== 'arcade') { if (!spin.drag && ++spin.idle > 60) spin.y += 0.0025; brainGroup.rotation.set(spin.x, spin.y, 0); }
   }
-  renderer.render(scene, camera);
+  if (view === 'arcade') renderer.render(arcade, arcadeCam); else renderer.render(scene, camera);
 }
 applyLang();
 applyLayout(layoutState || defaultLayout());
-resize(); loadBrain(); loadHistory(); requestAnimationFrame(animate);
+resize(); loadBrain().then(() => setView(view)); loadHistory(); requestAnimationFrame(animate);
+document.body.classList.toggle('arcade', view === 'arcade');
 </script>
 </body>
 </html>

@@ -369,14 +369,15 @@ class CasinoEnv:
         if price is None:
             self._close_bonus_modal()
             return 0.0, 0.0, False, None
+        cap = min(self.drive.bank, self.drive.bonus_cap())     # never more than a small share of the bank
         for _ in range(45):                                # walk the dialog's stake to the wanted price
             stake, price = self._dialog_read()
             if price is None:
                 break
             step_dir = None
-            if price > self.drive.bank + 1e-9:
+            if price > cap + 1e-9:
                 step_dir = "left"
-            elif target and price < target * 0.75 and price * 1.3 <= self.drive.bank:
+            elif target and price < target * 0.75 and price * 1.3 <= cap:
                 step_dir = "right"
             elif target and price > target * 1.5:
                 step_dir = "left"
@@ -389,7 +390,8 @@ class CasinoEnv:
             if price2 == before_price:                     # end of the range
                 break
         stake, price = self._dialog_read()
-        if price is None or price > self.drive.bank + 1e-9:
+        if price is None or price > cap + 1e-9:
+            print(f"casino: cheapest feature costs {price} FUN, above the fly's limit {cap:.2f} - not buying")
             self._close_bonus_modal()
             return 0.0, 0.0, False, None
         before = self._read()
@@ -657,7 +659,7 @@ class CasinoEnv:
             self.links.append((f"bonus:{min_price:.2f}", f"buy bonus (from {min_price:.2f} FUN)"))
             fb = self._frame_box() or {"x": 0, "y": 0}
             self.boxes.append([int(fb["x"] + self.bonus["x"]), int(fb["y"] + self.bonus["y"]), int(self.bonus["w"]), int(self.bonus["h"])])
-            mask[self.bonus_i] = min_price <= self.drive.bank + 1e-9 and self.drive.desire >= 0.2
+            mask[self.bonus_i] = min_price <= self.drive.bonus_cap() and self.drive.bonus_allowed()
         try:
             title = self.page.title()
         except Exception:
@@ -817,7 +819,7 @@ class CasinoEnv:
     def _step_bonus(self) -> tuple[dict, float, bool]:
         """Buy the feature: the price is the stake, the whole bought round is the win."""
         target = (self.drive.target_bet or self._buttons[0]["value"]) * (self.bonus_ratio or 90.0)
-        price, win, ok, start_balance = self._buy_bonus(min(target, self.drive.bank))
+        price, win, ok, start_balance = self._buy_bonus(min(target, self.drive.bonus_cap()))
         if not ok:
             obs = self._observe()
             return obs, 0.0, False

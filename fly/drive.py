@@ -26,6 +26,8 @@ UNLUCKY_TTL = 45 * 60  # an unlucky slot is avoided for this long, then it gets 
 REST_DESIRE = 0.10     # below this the fly leaves the casino for a walk
 SWITCH_DESIRE = 0.18   # below this it tries another slot
 MAX_BET = 40.0
+BONUS_MAX_SHARE = 0.02 # a bought feature may cost at most this share of the bank (2 % of 50 000 = 1 000 FUN)
+BONUS_COOLDOWN = 12    # ordinary spins between two purchases
 BANK = 50_000.0      # the fly's own money: it believes it has this much and spends it across slots
 
 
@@ -50,6 +52,8 @@ class Drive:
         self.loss_streak = 0
         self.win_streak = 0
         self.target_bet: float | None = None
+        self.last_bonus_spin = -999
+        self.bonuses = 0
         self.reason = ""            # why the last switch / rest happened (for the page)
         self._load()
         self.desire = max(self.desire, 0.55)   # a fresh start (or a walk) restores some appetite
@@ -112,6 +116,7 @@ class Drive:
         self.session_net = 0.0
         self.loss_streak = self.win_streak = 0
         self.target_bet = None
+        self.last_bonus_spin = -999
         s = self.slots.setdefault(slug, {"name": name, "spins": 0, "wins": 0, "net": 0.0, "best_pct": 0.0,
                                          "lucky": False, "unlucky": False, "sessions": 0, "goals": 0, "busts": 0})
         s["sessions"] += 1
@@ -152,7 +157,7 @@ class Drive:
         if reward > 0:
             self.target_bet = min(MAX_BET, bet * (2.0 if reward >= 1 else 1.4))
         else:
-            self.target_bet = max(0.1, bet * (0.75 if self.loss_streak < 3 else 0.5))
+            self.target_bet = min(MAX_BET, max(0.1, bet * (0.75 if self.loss_streak < 3 else 0.5)))
         if self.desire > 0.75:
             self.target_bet = min(MAX_BET, self.target_bet * 1.3)
         # milestones against the start balance of this slot
@@ -185,9 +190,14 @@ class Drive:
         return events
 
     def bonus(self, price: float, win: float, reward: float) -> list[dict]:
-        """A bought feature counts like one big spin, and is recorded as an event of its own."""
+        """A bought feature counts like one big spin, and is recorded as an event of its own.
+        The price must not feed the stake pattern (it is 90x a stake), and buying cools the urge for a while."""
         st = self.slots.get(self.slot)
+        keep = self.target_bet
         events = self.spin(price, win, reward, None)
+        self.target_bet = keep
+        self.last_bonus_spin = self.session_spins
+        self.bonuses += 1
         if st is not None:
             st["bonuses"] = st.get("bonuses", 0) + 1
             st["bonus_net"] = round(st.get("bonus_net", 0.0) + win - price, 2)
@@ -197,6 +207,14 @@ class Drive:
     def bonus_prior(self) -> float:
         """Log-prior of buying the feature: temptation grows with appetite and after a lucky streak."""
         return -1.2 + 2.2 * self.desire + 0.3 * min(self.win_streak, 3)
+
+    def bonus_allowed(self) -> bool:
+        """Not too often: BONUS_COOLDOWN ordinary spins after a purchase, and only with real appetite."""
+        return self.desire >= 0.3 and self.session_spins - self.last_bonus_spin >= BONUS_COOLDOWN
+
+    def bonus_cap(self) -> float:
+        """The most the fly will pay for a feature: a small share of its bank."""
+        return self.bank * BONUS_MAX_SHARE
 
     # ---- decisions ----------------------------------------------------------------------------
     def wants_switch(self) -> bool:
