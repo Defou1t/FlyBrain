@@ -637,40 +637,46 @@ const envMap = (() => {
 // its rear half (tergites), deep red compound eyes, dark legs. Matte, slightly velvety - no bee yellow,
 // no wasp gloss. Patterns are procedural (the model has no UVs): stripes by position, fur as shells.
 const MAT = {
-  thorax: new THREE.MeshPhysicalMaterial({ color: 0xa8845c, roughness: 0.82, metalness: 0.0, clearcoat: 0.06, clearcoatRoughness: 0.8, sheen: new THREE.Color(0x2a1d12), envMap, envMapIntensity: 0.25 }),
-  body:   new THREE.MeshPhysicalMaterial({ color: 0xc8a473, roughness: 0.8, metalness: 0.0, clearcoat: 0.08, clearcoatRoughness: 0.7, sheen: new THREE.Color(0x2e2115), envMap, envMapIntensity: 0.25 }),
+  // DoubleSide: the model's body plates have small gaps between segments; without back faces they showed the background through the fly
+  thorax: new THREE.MeshPhysicalMaterial({ color: 0x8f6c46, roughness: 0.82, metalness: 0.0, clearcoat: 0.06, clearcoatRoughness: 0.8, sheen: new THREE.Color(0x2a1d12), envMap, envMapIntensity: 0.25, side: THREE.DoubleSide }),
+  body:   new THREE.MeshPhysicalMaterial({ color: 0xb08c5e, roughness: 0.8, metalness: 0.0, clearcoat: 0.08, clearcoatRoughness: 0.7, sheen: new THREE.Color(0x2e2115), envMap, envMapIntensity: 0.25, side: THREE.DoubleSide }),
   eyes:   new THREE.MeshPhysicalMaterial({ color: 0xa8161f, emissive: 0x2a0406, roughness: 0.35, metalness: 0.0, clearcoat: 0.9, clearcoatRoughness: 0.25, envMap, envMapIntensity: 0.8 }),
   wing:   new THREE.MeshPhysicalMaterial({ color: 0xe6f4ff, transparent: true, opacity: 0.34, roughness: 0.1, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false, envMap, envMapIntensity: 1.3 }),
   wingGhost: new THREE.MeshBasicMaterial({ color: 0xdfeeff, transparent: true, opacity: 0.09, side: THREE.DoubleSide, depthWrite: false }),
-  legs:   new THREE.MeshStandardMaterial({ color: 0x2f2318, roughness: 0.9, metalness: 0.0 }),
+  legs:   new THREE.MeshStandardMaterial({ color: 0x2f2318, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide }),
 };
 // stripes: dark bands along the body axis behind z0 (the abdomen), thin faint ones on the thorax
-function stripe(mat, z0, freq, dark, spread) {
+function stripe(mat, z0, freq, dark, spread, hairFreq, fuzz = 0xd8bd95) {
+  // plus the fuzz, shaded rather than built: a velvet rim (fuzz catches light at the silhouette) and a
+  // fine per-cell speckle (individual hairs). Shell fur - stacked copies of the mesh - showed as slices
+  // with see-through seams on this low-poly model.
   mat.onBeforeCompile = sh => {
     sh.uniforms.uZ0 = { value: z0 }; sh.uniforms.uFreq = { value: freq }; sh.uniforms.uDark = { value: dark }; sh.uniforms.uSpread = { value: spread };
+    sh.uniforms.uHairFreq = { value: hairFreq }; sh.uniforms.uFuzz = { value: new THREE.Color(fuzz) };
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vObjPos;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvObjPos = position;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vObjPos; uniform float uZ0, uFreq, uDark, uSpread;')
-      .replace('#include <color_fragment>', '#include <color_fragment>\n{ float rear = smoothstep(0.0, uSpread, uZ0 - vObjPos.z); float band = smoothstep(0.1, 0.6, sin((vObjPos.z - uZ0) * uFreq)); float side = 1.0 - 0.35 * smoothstep(0.2, 0.9, abs(normalize(vObjPos - vec3(0.0, vObjPos.y, vObjPos.z)).x)); diffuseColor.rgb *= mix(1.0, uDark, rear * band); diffuseColor.rgb *= 0.9 + 0.1 * side; }');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vObjPos; uniform float uZ0, uFreq, uDark, uSpread, uHairFreq; uniform vec3 uFuzz;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\n{ float rear = smoothstep(0.0, uSpread, uZ0 - vObjPos.z); float band = smoothstep(0.1, 0.6, sin((vObjPos.z - uZ0) * uFreq));'
+        + ' float side = 1.0 - 0.35 * smoothstep(0.2, 0.9, abs(normalize(vObjPos - vec3(0.0, vObjPos.y, vObjPos.z)).x)); diffuseColor.rgb *= mix(1.0, uDark, rear * band); diffuseColor.rgb *= 0.9 + 0.1 * side;'
+        + ' float h = fract(sin(dot(floor(vObjPos * uHairFreq), vec3(127.1, 311.7, 74.7))) * 43758.5453);'
+        + ' float fr = pow(1.0 - max(0.0, dot(normalize(vNormal), normalize(vViewPosition))), 2.5);'
+        + ' diffuseColor.rgb *= 0.9 + 0.2 * h; diffuseColor.rgb = mix(diffuseColor.rgb, uFuzz, fr * (0.16 + 0.22 * h)); }');
   };
   mat.needsUpdate = true;
 }
-// fur: shells of the same geometry pushed out along the normals, each keeping a random subset of cells
-function addFur(mesh, length, shells, color, density) {
-  for (let k = 1; k <= shells; k++) {
-    const f = k / shells;
-    const m = new THREE.ShaderMaterial({ transparent: true, depthWrite: false,
-      uniforms: { uOff: { value: f * length }, uF: { value: f }, uColor: { value: new THREE.Color(color) }, uDensity: { value: density } },
-      vertexShader: 'uniform float uOff; varying vec3 vN; varying vec3 vP; void main() { vN = normalize(normalMatrix * normal); vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position + normal * uOff, 1.0); }',
-      fragmentShader: 'uniform float uF, uDensity; uniform vec3 uColor; varying vec3 vN; varying vec3 vP;\n' +
-        'float hash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n' +
-        'void main() { float h = hash(floor(vP * uDensity)); float keep = step(0.84 + 0.14 * uF, h); if (keep < 0.5) discard; float a = (1.0 - uF * 0.7) * 0.42;\n' +
-        '  float l = 0.5 + 0.5 * max(0.0, dot(normalize(vN), normalize(vec3(-0.4, 0.8, 0.6)))); gl_FragColor = vec4(uColor * l * (0.55 + 0.45 * uF), a); }' });
-    const sm = new THREE.Mesh(mesh.geometry, m); sm.renderOrder = 3 + k; mesh.add(sm); furMeshes.push(sm); if (lite) sm.visible = false;
+// the glb carries flat (per-face) normals: lighting came out as a patchwork of facets with dark seams.
+// Weld the vertices by position and recompute smooth normals - the same low-poly mesh reads as one skin.
+function smoothGeometry(g) {
+  const pos = g.attributes.position, n = pos.count, key = new Map(), index = new Uint32Array(n), out = [];
+  for (let i = 0; i < n; i++) {
+    const k = Math.round(pos.getX(i) * 1e4) + ',' + Math.round(pos.getY(i) * 1e4) + ',' + Math.round(pos.getZ(i) * 1e4);
+    let j = key.get(k); if (j === undefined) { j = out.length / 3; key.set(k, j); out.push(pos.getX(i), pos.getY(i), pos.getZ(i)); } index[i] = j;
   }
+  const idx = g.index ? Array.from(g.index.array, i => index[i]) : Array.from(index);
+  const ng = new THREE.BufferGeometry(); ng.setAttribute('position', new THREE.Float32BufferAttribute(out, 3)); ng.setIndex(idx); ng.computeVertexNormals(); return ng;
 }
 new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
   const model = gltf.scene; let legsMesh = null, bodyMesh = null;
-  model.traverse(o => { if (!o.isMesh) return; const n = o.name.toLowerCase();
+  model.traverse(o => { if (!o.isMesh) return; const n = o.name.toLowerCase(); if (!n.includes('wing')) o.geometry = smoothGeometry(o.geometry);
     o.material = n.includes('wing') ? MAT.wing : n.includes('eye') ? MAT.eyes : n.includes('thorax') ? MAT.thorax : n.includes('leg') ? MAT.legs : MAT.body;
     if (n.includes('wing')) fly.wings.push({ mesh: o, s: n.startsWith('l') ? -1 : 1 }); if (n.includes('leg')) legsMesh = o; if (n === 'body') bodyMesh = o; });
   model.updateMatrixWorld(true);
@@ -678,10 +684,10 @@ new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
   if (thorax) new THREE.Box3().setFromObject(thorax).getCenter(tc);
   const bbAll = new THREE.Box3().setFromObject(model), L = bbAll.max.z - bbAll.min.z;
   // abdomen bands behind the thorax, faint thorax stripes, fur on both
-  stripe(MAT.body, tc.z - L * 0.06, 2 * Math.PI * 4.5 / Math.max(0.01, tc.z - bbAll.min.z), 0.38, L * 0.12);
-  stripe(MAT.thorax, tc.z + L * 0.4, 2 * Math.PI * 3.0 / (L * 0.3), 0.72, L * 0.6);
-  if (thorax) addFur(thorax, L * 0.024, 4, 0xd9bc92, 200 / L);
-  if (bodyMesh) addFur(bodyMesh, L * 0.012, 3, 0xcfae82, 260 / L);
+  stripe(MAT.body, tc.z - L * 0.06, 2 * Math.PI * 4.5 / Math.max(0.01, tc.z - bbAll.min.z), 0.38, L * 0.12, 260 / L);
+  stripe(MAT.thorax, tc.z + L * 0.4, 2 * Math.PI * 3.0 / (L * 0.3), 0.72, L * 0.6, 220 / L);
+  stripe(MAT.legs, tc.z, 1.0, 1.0, 0.0, 400 / L, 0x6a5238);
+
   fly.wings = fly.wings.map(({ mesh, s }) => {
     const bb = new THREE.Box3().setFromObject(mesh);
     const hinge = new THREE.Vector3(s < 0 ? bb.max.x : bb.min.x, bb.max.y, bb.max.z); hinge.x = tc.x + s * 0.12; hinge.y = Math.min(hinge.y, tc.y + 0.25);
@@ -843,6 +849,14 @@ function marqueeTexture() {   // "FLYBRAIN" and the BETKING logo (crown + wordma
   const keyA = new THREE.DirectionalLight(0xfff0dd, 0.7); keyA.position.set(-2, 4, 3); arcade.add(keyA);
   const rim = new THREE.DirectionalLight(BK.red, 0.4); rim.position.set(3, 2, -3); arcade.add(rim);
   const warm = new THREE.PointLight(0xffd6a8, 1.6, 3.5, 2); warm.position.set(0.7, 1.7, 1.3); arcade.add(warm);   // a warm lamp on the fly
+  // the one-armed bandit's arm: bracket on the right side of the head, shaft + red ball; pulled on every decision
+  const lever = new THREE.Group(); lever.position.set(0.53, headY - 0.22, -0.3); cabinet.add(lever);
+  const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.16, 0.14), steel); bracket.position.set(0.03, 0, 0); lever.add(bracket);
+  const pivot = new THREE.Group(); pivot.position.set(0.075, 0, 0); lever.add(pivot);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.02, 0.5, 16), steel); shaft.position.set(0, 0.25, 0); pivot.add(shaft);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.06, 24, 16), new THREE.MeshPhysicalMaterial({ color: BK.red, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.1, envMap, envMapIntensity: 0.8 })); knob.position.set(0, 0.52, 0); pivot.add(knob);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.06, 20), steel); hub.rotation.z = Math.PI / 2; pivot.add(hub);
+  cabinet.userData.lever = pivot;
   cabinet.userData.perch = { y: pedTop + ledgeH, z: 0.02 + deckDepth / 2 - 0.13, screenY: headY };
 }
 const brainLight = new THREE.PointLight(0x9fb4ff, 0.8, 3, 2); brainLight.position.set(0, 2.6, 0.6);
@@ -1126,8 +1140,8 @@ function animate(now) {
     tmp.set(fs.pos.x + 1, fs.pos.y + 0.05, fs.pos.z + 0.55); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp); flyRoot.rotateX(-0.15); qA.copy(flyRoot.quaternion); flyRoot.quaternion.copy(qTarget).slerp(qA, Math.min(1, dt * 5));
   } else if (fs.mode === 'perch') {   // arcade: sits on the cabinet's ledge, facing the screen, watching the reels
     grounded = true;
-    const pr = cabinet.userData.perch; fs.pos.set(-0.04, pr.y + 0.105, pr.z + 0.06); flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t0 * 1.7) * 0.004;
-    tmp.set(fs.pos.x - 0.02, fs.pos.y + 0.28 + Math.sin(t0 * 0.6) * 0.05, fs.pos.z - 0.8); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp); flyRoot.rotateX(0.55 + Math.sin(t0 * 0.9) * 0.05); flyRoot.rotateY(Math.sin(t0 * 0.35) * 0.12);
+    const pr = cabinet.userData.perch; fs.pos.set(-0.04, pr.y + 0.085, pr.z + 0.06); flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t0 * 1.7) * 0.004;
+    tmp.set(fs.pos.x - 0.02, fs.pos.y + 0.02 + Math.sin(t0 * 0.6) * 0.02, fs.pos.z - 0.8); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp); flyRoot.rotateX(0.12 + Math.sin(t0 * 0.9) * 0.03); flyRoot.rotateY(Math.sin(t0 * 0.35) * 0.12);
     qA.copy(flyRoot.quaternion); flyRoot.quaternion.copy(qTarget).slerp(qA, Math.min(1, dt * 4));
     if (flyCtl.broke) smoking = true;
   } else if (fs.mode === 'landed') {
@@ -1163,6 +1177,8 @@ function animate(now) {
     updateVideoTexture();
     cabinet.userData.glow.intensity = 1.1 + 0.3 * Math.sin(t0 * 2.3) + 0.2 * Math.sin(t0 * 5.1);
     cabinet.userData.spin.material.emissiveIntensity = 0.3 + 0.9 * Math.max(0, 1 - (now - lastDecisionAt) / 700);
+    { const u = clamp((now - lastDecisionAt) / 900, 0, 1);              // pull (fast) then spring back (slow)
+      const pull = u < 0.25 ? u / 0.25 : 1 - (u - 0.25) / 0.75; cabinet.userData.lever.rotation.x = -1.9 * Math.sin(pull * Math.PI / 2); }
     if (points) { brainGroup.rotation.set(0.1, t0 * 0.15, 0); }
   }
   if (points) {
