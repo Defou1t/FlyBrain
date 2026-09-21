@@ -236,7 +236,7 @@ class VizServer:
                     if not os.path.isfile(fp):
                         return self.send_error(404)
                     ctype = {"js": "application/javascript", "glb": "model/gltf-binary", "png": "image/png",
-                             "css": "text/css"}.get(fp.rsplit(".", 1)[-1], "application/octet-stream")
+                             "css": "text/css", "svg": "image/svg+xml"}.get(fp.rsplit(".", 1)[-1], "application/octet-stream")
                     self._send_cached(fp, ctype)
                 elif u.path == "/soma.bin":
                     self._send_static(server.soma_bin, "application/octet-stream", "soma.bin")

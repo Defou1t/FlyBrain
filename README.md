@@ -82,7 +82,7 @@ filtered out (`FORBIDDEN` in `fly/browser.py`) — extend that list, never shrin
 
 The page opens in the **arcade view**: a dark hall, a slot cabinet with the live video of the fly's
 browser on its screen, the fly perched on the control deck watching the reels, its brain floating
-above the marquee, a slowly orbiting camera and a small HUD (slot, bank, appetite, Σ dopamine, last
+above the marquee (FLYBRAIN · BETKING, in the site's red / black / yellow palette), a slowly orbiting camera and a small HUD (slot, bank, appetite, Σ dopamine, last
 spin). *Enter the game →* switches to the card desktop below; *⬢ arcade view* goes back; the choice
 is remembered. The cabinet and the fly are clickable: the menu offers *Enter the game*, the session
 cookie and the reset (and money when the fly is broke) — flying / shooing / wandering live only on

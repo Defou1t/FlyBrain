@@ -6,3 +6,5 @@ baked to glTF by the "housefly" project (https://github.com/sandbornm/housefly).
 Nodes: thorax, body, eyes, lWing, rWing, legs (81k triangles, vertex normals, no textures).
 
 three.min.js / GLTFLoader.js - three.js r128, MIT.
+
+betking-logo.svg - the BETKING logo (betking.com.ua, /uploads/logo-project/LogoBigNew2026.svg), trademark of its owner; used only to label the arcade marquee of this demo, which plays on that site.

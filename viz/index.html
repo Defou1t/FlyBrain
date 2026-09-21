@@ -129,6 +129,12 @@
   body.arcade #gl { z-index:1; pointer-events:auto; }
   #enterbtn { position:fixed; left:50%; bottom:34px; transform:translateX(-50%); z-index:20; display:none; background:rgba(12,16,26,.85); color:var(--fg); border:1px solid #3a4a7a; border-radius:24px; padding:11px 26px; font-size:15px; letter-spacing:.3px; cursor:pointer; box-shadow:0 10px 40px rgba(0,0,0,.6), 0 0 0 1px rgba(87,214,255,.15) inset; backdrop-filter:blur(6px); }
   #enterbtn:hover { border-color:var(--cyan); color:#fff; }
+  body.arcade { background:#080808; }
+  body.arcade #enterbtn { background:#ffe655; color:#111; border-color:#ffe655; font-weight:700; box-shadow:0 10px 40px rgba(0,0,0,.6); }
+  body.arcade #enterbtn:hover { background:#fff07a; color:#000; }
+  body.arcade #hud { border-color:#2a2a30; background:rgba(8,8,8,.78); }
+  body.arcade #hud h1 { color:#fff; }
+  body.arcade #hud h1 b { color:#e60037; font-weight:700; }
   body.arcade #enterbtn { display:block; }
   #hud { position:fixed; left:18px; top:14px; z-index:20; display:none; flex-direction:column; gap:6px; min-width:250px; background:rgba(10,13,22,.66); border:1px solid var(--line); border-radius:12px; padding:10px 14px; backdrop-filter:blur(6px); }
   body.arcade #hud { display:flex; }
@@ -206,7 +212,7 @@
 </div>
 <div id="topbtns"><button id="langbtn" title="language">EN</button><button id="arcadebtn" data-i18n="arcade_btn">⬢ arcade view</button><button id="layoutbtn" data-i18n="layout_btn" data-i18n-title="layout_title">↺ layout</button></div>
 <button id="enterbtn" data-i18n="enter_btn">Enter the game →</button>
-<div id="hud"><h1>FlyBrain</h1><div class="slot" id="hud-slot">…</div>
+<div id="hud"><h1>FlyBrain <span style="color:#4d4d4d;font-weight:400">·</span> <b>BETKING</b></h1><div class="slot" id="hud-slot">…</div>
   <div class="row"><span data-i18n="bank">bank FUN</span><b id="hud-bank">—</b></div>
   <div class="grp"><span data-i18n="appetite">appetite</span><div class="b"><i id="hud-desire" style="background:linear-gradient(90deg,#ff5c7a,#ffd93b,#5ee29a)"></i></div><span class="v" id="hud-desire-v">—</span></div>
   <div class="row"><span data-i18n="ds_dopa">Σ dopamine</span><b id="hud-dopa">—</b></div>
@@ -737,7 +743,7 @@ addEventListener('scroll', () => { layout(); fitOverlay(); }, { passive: true })
 // ================================================================== arcade view: a dark hall, a slot cabinet, the fly in front of it
 // Metres-ish units, its own camera; the fly and the brain are moved between the two scenes.
 const arcade = new THREE.Scene();
-arcade.fog = new THREE.Fog(0x06080e, 6, 16);
+arcade.fog = new THREE.Fog(0x080808, 6, 16);
 const arcadeCam = new THREE.PerspectiveCamera(38, 1, 0.05, 100);
 let view = 'desktop';
 try { view = localStorage.getItem('fly.view') || 'arcade'; } catch (e) { view = 'arcade'; }
@@ -768,19 +774,30 @@ function wedge(w, back, front, depth, ledge, mat) {     // side profile (z,y) ex
   const g = new THREE.ExtrudeGeometry(sh, { depth: w, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 2 });
   g.rotateY(-Math.PI / 2); g.translate(w / 2, 0, 0); return new THREE.Mesh(g, mat);   // extrude ran along -x after the turn: recentre
 }
-function marqueeTexture() {
-  const c = document.createElement('canvas'); c.width = 1024; c.height = 192; const x = c.getContext('2d');
-  const g = x.createLinearGradient(0, 0, 1024, 0); g.addColorStop(0, '#1b1440'); g.addColorStop(0.5, '#2a1660'); g.addColorStop(1, '#1b1440'); x.fillStyle = g; x.fillRect(0, 0, 1024, 192);
-  x.font = 'bold 118px "Segoe UI", Arial'; x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.shadowColor = '#ff4dd2'; x.shadowBlur = 28; x.fillStyle = '#ffe8f7'; x.fillText('FLYBRAIN', 512, 96);
-  x.shadowBlur = 0; x.font = '86px "Segoe UI Emoji", "Apple Color Emoji", sans-serif'; x.fillText('🪰', 118, 100); x.fillText('🎰', 906, 100);
-  const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
+// the site's palette (betking.com.ua): red #E60037, near-black #080808 / #10141c, yellow #FFE655, green #17FF8B
+const BK = { red: 0xe60037, redCss: '#e60037', black: '#080808', yellow: 0xffe655, yellowCss: '#ffe655', green: 0x17ff8b, grey: '#bfbfbf' };
+function marqueeTexture() {   // "FLYBRAIN" and the BETKING logo (crown + wordmark) on the site's black
+  const c = document.createElement('canvas'); c.width = 1180; c.height = 200; const x = c.getContext('2d');   // 5.9:1 like the marquee face
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 4;
+  const draw = logo => {
+    const g = x.createLinearGradient(0, 0, 0, 200); g.addColorStop(0, '#141418'); g.addColorStop(1, BK.black); x.fillStyle = g; x.fillRect(0, 0, 1180, 200);
+    x.fillStyle = BK.redCss; x.fillRect(0, 191, 1180, 9);                       // the site's red rule
+    x.textBaseline = 'middle'; x.textAlign = 'left'; x.font = 'bold 100px "Segoe UI", Arial, sans-serif';
+    x.shadowColor = BK.yellowCss; x.shadowBlur = 22; x.fillStyle = '#ffffff'; x.fillText('FLYBRAIN', 48, 96); x.shadowBlur = 0;
+    x.fillStyle = '#3a3a42'; x.fillRect(540, 40, 3, 116);                        // divider
+    if (logo) { const h = 58, w = h * logo.width / logo.height; x.drawImage(logo, 585, 96 - h / 2, w, h); }
+    else { x.fillStyle = BK.redCss; x.font = 'bold 70px "Segoe UI", Arial, sans-serif'; x.fillText('BETKING', 585, 96); }
+    t.needsUpdate = true;
+  };
+  draw(null);
+  const logo = new Image(); logo.onload = () => draw(logo); logo.src = '/assets/betking-logo.svg';
+  return t;
 }
 {
-  const gloss = new THREE.MeshPhysicalMaterial({ color: 0x0b0f1c, roughness: 0.28, metalness: 0.2, clearcoat: 0.9, clearcoatRoughness: 0.18, envMap, envMapIntensity: 0.6 });
-  const matte = new THREE.MeshStandardMaterial({ color: 0x1c2238, roughness: 0.7, metalness: 0.3 });
+  const gloss = new THREE.MeshPhysicalMaterial({ color: 0x0c0c10, roughness: 0.28, metalness: 0.2, clearcoat: 0.9, clearcoatRoughness: 0.18, envMap, envMapIntensity: 0.6 });
+  const matte = new THREE.MeshStandardMaterial({ color: 0x1a1a1f, roughness: 0.7, metalness: 0.3 });
   const steel = new THREE.MeshStandardMaterial({ color: 0x6e7690, roughness: 0.35, metalness: 0.85, envMap, envMapIntensity: 0.8 });
-  const ledCyan = new THREE.MeshBasicMaterial({ color: 0x57f0ff }), ledPink = new THREE.MeshBasicMaterial({ color: 0xff4dd2 });
+  const ledCyan = new THREE.MeshBasicMaterial({ color: BK.yellow }), ledPink = new THREE.MeshBasicMaterial({ color: BK.red });   // yellow edges, red accents - the site's palette
   const pedTop = 0.92, deckBack = 0.22, ledgeH = 0.07, deckDepth = 0.62;
   // pedestal + kick plate + coin tray
   const ped = roundedBox(1.0, pedTop - 0.06, 0.6, 0.04, gloss); ped.position.set(0, 0.06 + (pedTop - 0.06) / 2, 0); cabinet.add(ped);
@@ -793,8 +810,8 @@ function marqueeTexture() {
   // buttons on the slope
   const slopeAng = Math.atan2(deckBack - ledgeH, deckDepth - 0.26);
   const onSlope = (mesh, u, along) => { const z0 = 0.02 + deckDepth / 2 - 0.26, y0 = pedTop + ledgeH; mesh.position.set(u, y0 + Math.sin(slopeAng) * along + 0.012 * Math.cos(slopeAng), z0 - Math.cos(slopeAng) * along - 0.012 * Math.sin(slopeAng)); mesh.rotation.x = slopeAng; cabinet.add(mesh); };
-  const spinBtn = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.08, 0.035, 32), new THREE.MeshPhysicalMaterial({ color: 0xff2e4a, emissive: 0xff2e4a, emissiveIntensity: 0.35, roughness: 0.3, clearcoat: 1 })); onSlope(spinBtn, 0.3, 0.24); cabinet.userData.spin = spinBtn;
-  [0xffd93b, 0x5ee29a, 0x57d6ff].forEach((col, i) => { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.035, 0.025, 24), new THREE.MeshPhysicalMaterial({ color: col, emissive: col, emissiveIntensity: 0.3, roughness: 0.3, clearcoat: 1 })); onSlope(b, -0.34 + i * 0.1, 0.27); });
+  const spinBtn = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.08, 0.035, 32), new THREE.MeshPhysicalMaterial({ color: BK.red, emissive: BK.red, emissiveIntensity: 0.35, roughness: 0.3, clearcoat: 1 })); onSlope(spinBtn, 0.3, 0.24); cabinet.userData.spin = spinBtn;
+  [BK.yellow, BK.green, 0xffad33].forEach((col, i) => { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.035, 0.025, 24), new THREE.MeshPhysicalMaterial({ color: col, emissive: col, emissiveIntensity: 0.3, roughness: 0.3, clearcoat: 1 })); onSlope(b, -0.34 + i * 0.1, 0.27); });
   // head: body box behind, bevelled frame in front, the screen recessed inside the frame's hole
   const headY = pedTop + deckBack + 0.42, tilt = -0.1;
   const head = new THREE.Group(); head.position.set(0, headY, -0.02 + deckDepth / 2 - deckDepth); head.rotation.x = tilt; cabinet.add(head);
@@ -810,13 +827,13 @@ function marqueeTexture() {
   // side LED strips down the pedestal front edges
   [-1, 1].forEach(sg => { const strip = new THREE.Mesh(new THREE.BoxGeometry(0.012, pedTop - 0.12, 0.012), ledCyan); strip.position.set(sg * 0.5, 0.06 + (pedTop - 0.06) / 2, 0.322); cabinet.add(strip); });
   // lights: the screen's glow on the fly, a cone from above, room fill
-  const glow = new THREE.PointLight(0x9fc4ff, 1.2, 3.5, 2); glow.position.set(0, headY - 0.1, 0.55); cabinet.add(glow); cabinet.userData.glow = glow;
+  const glow = new THREE.PointLight(0xffd7dc, 1.1, 3.5, 2); glow.position.set(0, headY - 0.1, 0.55); cabinet.add(glow); cabinet.userData.glow = glow;
   const spot = new THREE.SpotLight(0xdfe6ff, 1.1, 9, 0.5, 0.6, 1.5); spot.position.set(0.4, 4.2, 1.6); spot.target.position.set(0, 1.2, 0.1); arcade.add(spot); arcade.add(spot.target);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x0a0d18, roughness: 0.85, metalness: 0.15 })); floor.rotation.x = -Math.PI / 2; arcade.add(floor);
-  const grid = new THREE.GridHelper(40, 80, 0x22305a, 0x141c33); grid.position.y = 0.002; arcade.add(grid);
-  arcade.add(new THREE.HemisphereLight(0x8fa8ff, 0x1a1208, 0.5));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x0a0a0d, roughness: 0.85, metalness: 0.15 })); floor.rotation.x = -Math.PI / 2; arcade.add(floor);
+  const grid = new THREE.GridHelper(40, 80, 0x3a1a22, 0x1a1418); grid.position.y = 0.002; arcade.add(grid);
+  arcade.add(new THREE.HemisphereLight(0xbfbfc8, 0x1a1208, 0.5));
   const keyA = new THREE.DirectionalLight(0xfff0dd, 0.7); keyA.position.set(-2, 4, 3); arcade.add(keyA);
-  const rim = new THREE.DirectionalLight(0x57d6ff, 0.35); rim.position.set(3, 2, -3); arcade.add(rim);
+  const rim = new THREE.DirectionalLight(BK.red, 0.4); rim.position.set(3, 2, -3); arcade.add(rim);
   const warm = new THREE.PointLight(0xffd6a8, 1.6, 3.5, 2); warm.position.set(0.7, 1.7, 1.3); arcade.add(warm);   // a warm lamp on the fly
   cabinet.userData.perch = { y: pedTop + ledgeH, z: 0.02 + deckDepth / 2 - 0.13, screenY: headY };
 }
