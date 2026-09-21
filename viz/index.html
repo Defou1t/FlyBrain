@@ -475,7 +475,8 @@ const FRAG = `
   }`;
 function makeMat(haloLayer) {
   // neurons: normal (premultiplied) blending so dense regions do not wash out to white; halo: additive glow
-  return new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, depthTest: false, premultipliedAlpha: true, blending: haloLayer ? THREE.AdditiveBlending : THREE.NormalBlending,
+  // depthTest stays ON: the cloud must not paint over the fly when it flies past the brain (it looked see-through)
+  return new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, depthTest: true, premultipliedAlpha: true, blending: haloLayer ? THREE.AdditiveBlending : THREE.NormalBlending,
     uniforms: { uMix: { value: 1 }, uSize: { value: 1.8 }, uCamZ: { value: 1000 }, uPixelRatio: { value: Math.min(devicePixelRatio, 2) }, uDopa: { value: 0 }, uPam: { value: 0 }, uHalo: { value: haloLayer ? 1 : 0 }, uHideBelow: { value: -9 }, uBoost: { value: new Array(9).fill(0) } } });
 }
 async function loadBrain() {
@@ -701,6 +702,7 @@ new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
   fly.cig = { group: cig, ember, glow, tip: new THREE.Vector3() };
   const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
   model.position.sub(tc);                    // origin = thorax, so the body sits exactly on the landing point
+  model.traverse(o => { if (o.isMesh && o.material && o.material.transparent) o.renderOrder = 20; });   // wings, fur: after the brain cloud, so they blend over it, never under
   fly.len = Math.max(size.x, size.y, size.z); fly.model = model; flyRoot.add(model); fly.ready = true;
   if (view === 'arcade') flyRoot.scale.setScalar(0.72 / fly.len); else layout();
 }, undefined, err => { console.warn('drosophila.glb failed', err); const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), MAT.body); m.scale.set(1, 0.8, 1.6); flyRoot.add(m); fly.len = 3.2; fly.ready = true; layout(); });
@@ -730,7 +732,11 @@ function layout() {
   const b = $('card-brain').getBoundingClientRect(), f = $('card-fly').getBoundingClientRect();
   // the cloud spans ~0.95 x 1.3 units (brain + VNC below it): fit that into the card and centre it
   const S = Math.min((b.height - 44) * 0.68, b.width * 0.85);
-  brainGroup.position.copy(toWorld(b.left + b.width / 2, b.top + 30 + (b.height - 34) * 0.5)); brainGroup.position.y -= brainMid * S; brainGroup.scale.setScalar(Math.max(20, S));
+  // the cloud sits entirely behind the z = 0 plane (the fly flies at z >= 4), scaled up to compensate the distance:
+  // otherwise the fly looked see-through whenever it crossed the brain card
+  const back = S * 1.15, comp = (camera.position.z + back) / camera.position.z;
+  const c0 = toWorld(b.left + b.width / 2, b.top + 30 + (b.height - 34) * 0.5);
+  brainGroup.position.set(c0.x * comp, (c0.y - brainMid * S) * comp, -back); brainGroup.scale.setScalar(Math.max(20, S * comp));   // same spot on screen, further away
   if (brainMat) { const px = clamp(S / 120, 1.2, 2.8); brainMat.uniforms.uSize.value = px; haloMat.uniforms.uSize.value = px; }
   flyState.home.copy(toWorld(f.left + f.width / 2, f.top + f.height * 0.5));
   flyState.floor = flyState.home.y - f.height * 0.18;
