@@ -246,7 +246,47 @@ class Worker:
         return self.proc is not None and self.proc.poll() is None
 
 
+def stop_fly(port: int) -> int:
+    """`python -m fly.serve --stop`: stop the fly listening on the port together with its supervisor
+    (the job object takes Chromium and the tunnel down with them)."""
+    pid = listener_pid(port)
+    if not pid:
+        print(f"serve: nothing is listening on port {port}")
+        return 1
+    target = pid
+    try:
+        if os.name == "nt":
+            out = subprocess.run(["powershell", "-NoProfile", "-Command",
+                                  f"$p = Get-CimInstance Win32_Process -Filter 'ProcessId={pid}'; $q = Get-CimInstance Win32_Process -Filter \"ProcessId=$($p.ParentProcessId)\"; "
+                                  f"Write-Output $p.CommandLine; Write-Output $q.ProcessId; Write-Output $q.CommandLine"],
+                                 capture_output=True, text=True, timeout=20).stdout.splitlines()
+            own = "fly.run" in (out[0] if out else "") or "fly.serve" in (out[0] if out else "")
+            if len(out) >= 3 and "fly.serve" in out[2]:
+                target = int(out[1])
+        else:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                cmd = f.read().replace(b"\0", b" ").decode(errors="replace")
+            own = "fly." in cmd
+            with open(f"/proc/{pid}/stat") as f:
+                ppid = int(f.read().split()[3])
+            with open(f"/proc/{ppid}/cmdline", "rb") as f:
+                if b"fly.serve" in f.read():
+                    target = ppid
+    except Exception:
+        own = True
+    if not own:
+        print(f"serve: port {port} belongs to another program (pid {pid}) - not touching it")
+        return 1
+    subprocess.run(["taskkill", "/PID", str(target), "/T", "/F"] if os.name == "nt" else ["kill", str(target)],
+                   capture_output=True)
+    print(f"serve: stopped the fly (pid {target})")
+    return 0
+
+
 def main():
+    if "--stop" in sys.argv:
+        port = int(sys.argv[sys.argv.index("--port") + 1]) if "--port" in sys.argv else 8765
+        raise SystemExit(stop_fly(port))
     mine, rest = split_args(sys.argv[1:])
     port = int(mine.get("port", 8765))
     say(f"serve: supervisor started (pid {os.getpid()}) " + " ".join(sys.argv[1:]))
@@ -297,6 +337,9 @@ def main():
                     crashes = 0
             if not worker.alive:
                 code = worker.proc.returncode
+                if code == 3:                                  # the page's "stop the fly"
+                    say("serve: the fly was stopped from the page - supervisor exits")
+                    break
                 if code == 0:
                     say("serve: the fly finished its episodes, starting again")
                     worker.start()

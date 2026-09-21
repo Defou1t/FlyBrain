@@ -16,6 +16,10 @@ class Restart(Exception):
     """The page changed the session cookie: exit cleanly so fly.serve starts a fresh fly."""
 
 
+class Shutdown(Exception):
+    """The page asked to stop the fly for good: exit with code 3, fly.serve stops as well."""
+
+
 class SwitchMode(Exception):
     """Raised inside an episode when the page asks for another environment (browse <-> casino)."""
 
@@ -54,6 +58,8 @@ class Control:
             raise SwitchMode(cmd)
         elif cmd == "restart":
             raise Restart()
+        elif cmd == "shutdown":
+            raise Shutdown()
         self.viz.set_state(paused=self.paused, mode=self.mode, broke=self.broke)
         return cmd
 

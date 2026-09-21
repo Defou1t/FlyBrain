@@ -280,7 +280,7 @@ class VizServer:
                     if not local:
                         return self._send(b"forbidden", "text/plain", 403)
                     do = parse_qs(u.query).get("do", [""])[0]
-                    if do not in ("pause", "resume", "casino", "browse", "refill", "reset"):
+                    if do not in ("pause", "resume", "casino", "browse", "refill", "reset", "shutdown"):
                         return self._send(b"unknown command", "text/plain", 400)
                     server.commands.put(do)
                     self._send(json.dumps({"queued": do, "state": server.state}).encode(), "application/json")

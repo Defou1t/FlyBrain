@@ -212,7 +212,7 @@
   <div class="row"><span data-i18n="ds_dopa">Σ dopamine</span><b id="hud-dopa">—</b></div>
   <div class="last" id="hud-last"></div></div>
 <div id="hint" data-i18n-html="hint"><b>cards</b> drag by the header, resize by the corner, snap to each other · ⤢ maximize</div>
-<div id="gear"><div class="gear-title" id="gear-title">⚙ the fly</div><button id="g-enter" data-i18n="enter_btn">Enter the game →</button><button id="g-anim"></button><button id="g-pause"></button><button id="g-mode"></button><button id="g-refill" style="display:none" data-i18n="g_refill">Give 50 000 FUN</button><hr><button id="g-session" data-i18n="g_session">Use my own account (PHPSESSID)…</button><button id="g-reset" class="danger" data-i18n="g_reset">Reset results &amp; memory…</button></div>
+<div id="gear"><div class="gear-title" id="gear-title">⚙ the fly</div><button id="g-enter" data-i18n="enter_btn">Enter the game →</button><button id="g-anim"></button><button id="g-pause"></button><button id="g-mode"></button><button id="g-refill" style="display:none" data-i18n="g_refill">Give 50 000 FUN</button><hr><button id="g-session" data-i18n="g_session">Use my own account (PHPSESSID)…</button><button id="g-reset" class="danger" data-i18n="g_reset">Reset results &amp; memory…</button><button id="g-stop" class="danger" data-i18n="g_stop">Stop the fly (shut down)…</button></div>
 <div id="flash"></div>
 <div id="wait" data-i18n="waiting">waiting for the simulation…</div>
 <div id="session">
@@ -250,6 +250,7 @@ const I18N = {
     s_save: 'Save and restart the fly', s_skip: 'Keep playing as a guest', s_bad: 'that does not look like a PHPSESSID', s_saved: 'cookie saved — the fly restarts with it',
     reset_confirm: 'Reset the fly? Bank back to 50 000 FUN, slot memory, learned readout weights, the dopamine log and the charts all start over.',
     reset_done: 'reset: results and memory cleared',
+    g_stop: 'Stop the fly (shut down)…', stop_confirm: 'Stop the fly? The browser, the simulation and the server shut down; start.bat (or fly.serve) starts it again. Bank and learning are kept.', stopped: 'the fly is stopped — run start.bat to start it again',
     groups: ['other', 'optic lobes', 'central brain', 'VNC', 'descending', 'motor', 'retina', 'dopamine PPL101 (−)', 'dopamine PAM (+)'],
     neurons: 'neurons', synapses: 'synapses', strongest: 'strongest now', bright: 'bright neurons',
     fly_hover: 'hovering', fly_walk: 'walking', fly_fly: 'flying to the target', fly_landed: 'landed on the target', fly_smoke: 'broke — smoking, waiting for money', fly_shooed: 'shooed away — sitting and waiting',
@@ -286,6 +287,7 @@ const I18N = {
     s_save: 'Зберегти й перезапустити муху', s_skip: 'Грати далі як гість', s_bad: 'це не схоже на PHPSESSID', s_saved: 'cookie збережено — муха перезапускається з ним',
     reset_confirm: 'Скинути муху? Банк знову 50 000 FUN, пам\'ять про слоти, навчені ваги readout, журнал дофаміну й графіки починаються спочатку.',
     reset_done: 'скидання: результати й пам\'ять очищено',
+    g_stop: 'Зупинити муху (вимкнути)…', stop_confirm: 'Зупинити муху? Браузер, симуляція й сервер вимкнуться; start.bat (або fly.serve) запускає знову. Банк і навчання зберігаються.', stopped: 'муху зупинено — запустіть start.bat, щоб увімкнути знову',
     groups: ['інші', 'зорові частки', 'центральний мозок', 'VNC', 'низхідні', 'моторні', 'сітківка', 'дофамін PPL101 (−)', 'дофамін PAM (+)'],
     neurons: 'нейронів', synapses: 'синапсів', strongest: 'зараз найсильніше', bright: 'яскравих нейронів',
     fly_hover: 'ширяє', fly_walk: 'ходить', fly_fly: 'летить до цілі', fly_landed: 'сіла на ціль', fly_smoke: 'програлася — курить і чекає на гроші', fly_shooed: 'прогнана — сидить і чекає',
@@ -605,6 +607,8 @@ $('g-mode').onclick = () => cmd(flyCtl.mode === 'casino' ? 'browse' : 'casino');
 $('g-refill').onclick = () => cmd('refill');
 $('g-session').onclick = () => { $('gear').style.display = 'none'; openSession(); };
 $('g-reset').onclick = () => { $('gear').style.display = 'none'; if (confirm(t('reset_confirm'))) cmd('reset'); };
+let stopping = false;
+$('g-stop').onclick = () => { $('gear').style.display = 'none'; if (confirm(t('stop_confirm'))) { stopping = true; cmd('shutdown'); } };
 
 // ================================================================== the fly (NeuroMechFly v2, EPFL flygym, Apache-2.0)
 const flyRoot = new THREE.Group(); scene.add(flyRoot);
@@ -1023,7 +1027,7 @@ es.onmessage = ev => {
   else if (m.t === 'state') applyState(m);
 };
 let lost = false;
-es.onerror = () => { lost = true; $('wait').style.display = 'block'; $('wait').textContent = t('reconnect'); };
+es.onerror = () => { lost = true; $('wait').style.display = 'block'; $('wait').textContent = stopping ? t('stopped') : t('reconnect'); if (stopping) es.close(); };
 es.onopen = () => { if (lost) location.reload(); };
 
 // ================================================================== animation loop

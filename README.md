@@ -120,7 +120,10 @@ switches to Ukrainian.
 * **Give 50 000 FUN** — appears when the bank is empty;
 * **Use my own account (PHPSESSID)…** — see above; the fly restarts with the cookie;
 * **Reset results & memory…** — bank back to 50,000, slot memory, learned readout weights, the
-  dopamine log and the charts all start over (asks for confirmation).
+  dopamine log and the charts all start over (asks for confirmation);
+* **Stop the fly (shut down)…** — closes the browser, the simulation, the server and the tunnel;
+  bank and learning are kept. Other ways to stop: `stop.bat` (or `python -m fly.serve --stop`),
+  Ctrl+C in the console, or simply closing the console window.
 
 Viewers through the tunnel or the LAN can watch but not control (`/admin/*` is local-only).
 

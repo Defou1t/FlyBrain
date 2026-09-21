@@ -11,7 +11,7 @@ import time
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INCLUDE = ["fly", "viz", "docs", "tools", "README.md", "requirements.txt", "start.bat", "start.sh", ".gitignore", ".gitattributes"]
+INCLUDE = ["fly", "viz", "docs", "tools", "README.md", "requirements.txt", "start.bat", "stop.bat", "start.sh", ".gitignore", ".gitattributes"]
 SKIP_DIRS = {"__pycache__", ".git", ".venv", "venv", "node_modules", "dist", "data", "runtime"}
 SKIP_EXT = {".pyc", ".log"}
 

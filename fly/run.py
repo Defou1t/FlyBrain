@@ -11,7 +11,7 @@ import time
 import numpy as np
 
 from . import connectome
-from .agent import Control, Restart, SwitchMode, reset_all, run_episode
+from .agent import Control, Restart, Shutdown, SwitchMode, reset_all, run_episode
 from .brain import LIF
 from .browser import SESSION_FILE, START, WebEnv, load_session_cookie
 from .motor import Readout
@@ -98,6 +98,7 @@ def main():
     control = Control(viz, mode)
     rng = np.random.default_rng(args.seed)
     interrupted = False
+    shutdown = False
     return_to = None                                 # 'casino' while the fly takes a walk to recover its appetite
     episodes = itertools.count(1) if args.episodes <= 0 else range(1, args.episodes + 1)
     total_label = "∞" if args.episodes <= 0 else str(args.episodes)
@@ -125,6 +126,10 @@ def main():
             except Restart:
                 print("session cookie changed - restarting with it")
                 break
+            except Shutdown:
+                print("the page asked to stop the fly - shutting down")
+                shutdown = interrupted = True
+                break
             extra = (f"balance {env.balance} FUN, cumulative dopamine {env.cum_reward:+.2f}" if mode == "casino"
                      else f"unique pages {len(env.visited)}")
             print(f"  return {total:+.1f}, {extra}")
@@ -136,6 +141,9 @@ def main():
                     switch(sw.mode)
                     continue
                 except Restart:
+                    break
+                except Shutdown:
+                    shutdown = interrupted = True
                     break
                 continue                             # refilled: a fresh episode picks a slot again
             if mode == "casino" and getattr(env, "rest", False):
@@ -160,6 +168,8 @@ def main():
             pass
     if viz and viz.tunnel:
         viz.tunnel.stop()
+    if shutdown:
+        sys.exit(3)                                  # fly.serve reads this as "stop for good"
 
 
 if __name__ == "__main__":
