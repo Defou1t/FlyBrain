@@ -37,6 +37,7 @@ class Drive:
         self.bank_min = self.bank_max = BANK      # extremes since the money was handed over (refill resets)
         self.bank_min_at = self.bank_max_at = ""
         self.since = datetime.now().strftime("%d.%m %H:%M")
+        self.since_ts = time.time()
         self.spins_total = 0
         self.slots: dict[str, dict] = {}
         self.events: list[dict] = []
@@ -68,6 +69,7 @@ class Drive:
             self.bank_min_at = d.get("bank_min_at", "")
             self.bank_max_at = d.get("bank_max_at", "")
             self.since = d.get("since", self.since)
+            self.since_ts = float(d.get("since_ts", 0.0))
             self.spins_total = int(d.get("spins_total", 0))
             self.slots = d.get("slots", {})
         except (OSError, ValueError):
@@ -83,7 +85,8 @@ class Drive:
         with open(self.path, "w", encoding="utf-8") as f:
             json.dump({"desire": self.desire, "bank": round(self.bank, 2), "bank_min": round(self.bank_min, 2),
                        "bank_max": round(self.bank_max, 2), "bank_min_at": self.bank_min_at,
-                       "bank_max_at": self.bank_max_at, "since": self.since, "spins_total": self.spins_total,
+                       "bank_max_at": self.bank_max_at, "since": self.since, "since_ts": self.since_ts,
+                       "spins_total": self.spins_total,
                        "slots": self.slots}, f, ensure_ascii=False, indent=1)
 
     def _event(self, kind: str, balance: float | None, **extra) -> dict:
@@ -174,22 +177,22 @@ class Drive:
                     self._mark_unlucky(s)
                 events.append(self._event("bust", balance, loss=round(self.start - balance, 2)))
                 self.desire = max(0.0, self.desire - 0.3)
-                self.reason = "слив"
+                self.reason = "bust"
         if self.broke:
             events.append(self._event("broke", balance))
-            self.reason = "деньги кончились"
+            self.reason = "broke"
         self._save()
         return events
 
     # ---- decisions ----------------------------------------------------------------------------
     def wants_switch(self) -> bool:
         if self.loss_streak >= LOSS_STREAK_SWITCH:
-            self.reason = f"{self.loss_streak} проигрышей подряд"
+            self.reason = "streak"
             return True
         if self.desire < SWITCH_DESIRE and self.session_spins >= 5:
-            self.reason = "пропал азарт"
+            self.reason = "bored"
             return True
-        return self.reason == "слив"
+        return self.reason == "bust"
 
     def wants_rest(self) -> bool:
         return self.desire < REST_DESIRE and not self.broke
@@ -205,6 +208,7 @@ class Drive:
         self.bank_min = self.bank_max = self.bank
         self.bank_min_at = self.bank_max_at = ""
         self.since = datetime.now().strftime("%d.%m %H:%M")
+        self.since_ts = time.time()
         self.spins_total = 0
         self.desire = max(self.desire, 0.6)
         self.reason = ""
@@ -227,6 +231,22 @@ class Drive:
                                          "lucky": False, "unlucky": False, "sessions": 0, "goals": 0, "busts": 0})
         s["unplayable"] = True
         self._save()
+
+    def reset(self):
+        """Forget everything: bank back to the start, no slot memory, no events, fresh appetite."""
+        self.slots = {}
+        self.events = []
+        self.slot, self.name, self.start = None, "", None
+        self.session_spins, self.session_net = 0, 0.0
+        self.loss_streak = self.win_streak = 0
+        self.target_bet = None
+        self.reason = ""
+        self.desire = 0.6
+        try:
+            os.remove(self.events_path)
+        except OSError:
+            pass
+        self.refill()
 
     def close_slot(self, why: str):
         s = self.slots.get(self.slot)

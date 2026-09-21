@@ -18,6 +18,19 @@ FORBIDDEN = re.compile(
     re.I)
 
 
+def launch_chromium(pw, headless: bool = True):
+    """Chromium for the fly. Headless runs use the *new* headless mode of the full browser (channel
+    "chromium"), which renders with the real GPU: the slot clients then run at the display rate
+    (~120 fps on an RTX) instead of SwiftShader's ~24 fps, and the screencast follows. Falls back to the
+    classic headless shell when that channel is not installed (playwright install chromium adds both)."""
+    if headless:
+        try:
+            return pw.chromium.launch(headless=True, channel="chromium")
+        except Exception as e:
+            print(f"browser: new headless mode unavailable ({str(e)[:60]}), using the headless shell")
+    return pw.chromium.launch(headless=headless)
+
+
 def start_screencast(context, page, on_frame, max_width: int = 800, max_height: int = 500, quality: int = 40):
     """Live video of the page for the visualiser: Chromium's own screencast (a JPEG per repaint, so
     reels spin at the page's frame rate instead of one screenshot per decision). Frames are delivered
@@ -58,7 +71,7 @@ class WebEnv:
         self.max_actions = max_actions
         self.max_steps = max_steps
         self._pw = sync_playwright().start()
-        self.browser = self._pw.chromium.launch(headless=headless)
+        self.browser = launch_chromium(self._pw, headless)
         self.context = self.browser.new_context(viewport={"width": viewport[0], "height": viewport[1]},
                                                 locale="uk-UA")
         self.session = False

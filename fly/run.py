@@ -11,7 +11,7 @@ import time
 import numpy as np
 
 from . import connectome
-from .agent import Control, SwitchMode, run_episode
+from .agent import Control, Restart, SwitchMode, reset_all, run_episode
 from .brain import LIF
 from .browser import SESSION_FILE, START, WebEnv, load_session_cookie
 from .motor import Readout
@@ -71,7 +71,12 @@ def main():
         viz.wait_for_client(timeout=3 if args.episodes <= 0 else 30)   # supervised: do not wait for viewers
 
     cookie = load_session_cookie(args.session_file)
-    print("session: PHPSESSID loaded from file/env, browsing as the logged-in user" if cookie else "session: guest")
+    if cookie:
+        print("session: PHPSESSID loaded from file/env, browsing as the logged-in user")
+    else:
+        print("session: guest - no cookie. Demo slots work as a guest; to play as YOUR account put your own\n"
+              "         PHPSESSID into data/session.txt (or paste it in the page's gear menu on localhost).\n"
+              "         Never use somebody else's cookie.")
 
     def make_env(mode: str):
         if mode == "casino":
@@ -115,6 +120,9 @@ def main():
                 return_to = None
                 switch(sw.mode)
                 continue
+            except Restart:
+                print("session cookie changed - restarting with it")
+                break
             extra = (f"balance {env.balance} FUN, cumulative dopamine {env.cum_reward:+.2f}" if mode == "casino"
                      else f"unique pages {len(env.visited)}")
             print(f"  return {total:+.1f}, {extra}")
@@ -125,6 +133,8 @@ def main():
                     control.broke = False
                     switch(sw.mode)
                     continue
+                except Restart:
+                    break
                 continue                             # refilled: a fresh episode picks a slot again
             if mode == "casino" and getattr(env, "rest", False):
                 return_to = "casino"                 # lost its appetite: one walk around the site, then back

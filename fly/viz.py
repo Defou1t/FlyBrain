@@ -23,7 +23,9 @@ from urllib.parse import parse_qs, urlparse
 
 import numpy as np
 
+from .browser import SESSION_FILE
 from .connectome import Brain
+LOGCSV = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "dopamine.csv")
 
 STATIC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "viz")
 
@@ -136,6 +138,11 @@ class VizServer:
         self.lock = threading.Lock()
         self.gz_cache: dict[str, bytes] = {}
         self.raw_cache: dict[str, bytes] = {}
+        self.latest_jpg: bytes | None = None                 # newest screencast frame for /stream.mjpg
+        self.frame_seq = 0
+        self.frame_cv = threading.Condition()
+        self.history: list[dict] = []                        # spins of this session (page reload keeps the charts)
+        self._load_history()
 
         has = ~np.isnan(brain.soma[:, 0])
         idx = np.flatnonzero(has)
@@ -232,21 +239,63 @@ class VizServer:
                     self._send_cached(fp, ctype)
                 elif u.path == "/soma.bin":
                     self._send_static(server.soma_bin, "application/octet-stream", "soma.bin")
+                elif u.path == "/history.json":
+                    with server.lock:
+                        body = json.dumps({"spins": server.history[-2000:]}).encode()
+                    self._send(body, "application/json")
+                elif u.path == "/stream.mjpg":
+                    # live video of the fly's browser as motion-JPEG: the <img> decodes natively, no JSON,
+                    # no base64; local viewers get every frame (~60 fps), tunnel viewers ~8 fps
+                    self.send_response(200)
+                    self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+                    self.send_header("Cache-Control", "no-cache")
+                    self.end_headers()
+                    gap = 1 / 60 if local else 1 / 8
+                    seen, last = -1, 0.0
+                    try:
+                        while True:
+                            with server.frame_cv:
+                                server.frame_cv.wait_for(lambda: server.frame_seq != seen, timeout=1.0)
+                                jpg, seen = server.latest_jpg, server.frame_seq
+                            if not jpg:
+                                continue
+                            wait = gap - (time.time() - last)
+                            if wait > 0:
+                                time.sleep(wait)
+                            last = time.time()
+                            self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                                             + str(len(jpg)).encode() + b"\r\n\r\n" + jpg + b"\r\n")
+                            self.wfile.flush()
+                    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+                        pass
                 elif u.path == "/meta.json":
                     meta = dict(server.meta, local=local, public=server.public,
                                 lan_url=f"http://{server.lan}:{server.port}/",
                                 lan_urls=[f"http://{ip}:{server.port}/" for ip in server.ips],
                                 tunnel_url=server.tunnel_url, tunnel_managed=server.tunnel_managed,
-                                state=server.state)
+                                state=server.state, session=os.path.exists(SESSION_FILE) or bool(os.environ.get("FLY_PHPSESSID")))
                     self._send(json.dumps(meta).encode(), "application/json")
                 elif u.path == "/admin/cmd":          # page -> fly: pause / resume / casino / browse
                     if not local:
                         return self._send(b"forbidden", "text/plain", 403)
                     do = parse_qs(u.query).get("do", [""])[0]
-                    if do not in ("pause", "resume", "casino", "browse", "refill"):
+                    if do not in ("pause", "resume", "casino", "browse", "refill", "reset"):
                         return self._send(b"unknown command", "text/plain", 400)
                     server.commands.put(do)
                     self._send(json.dumps({"queued": do, "state": server.state}).encode(), "application/json")
+                elif u.path == "/admin/session":      # first run: the viewer pastes their own PHPSESSID (local only)
+                    if not local:
+                        return self._send(b"forbidden", "text/plain", 403)
+                    q = parse_qs(u.query)
+                    val = (q.get("value") or [""])[0].strip()
+                    if not re.fullmatch(r"[A-Za-z0-9,_-]{16,128}", val):
+                        return self._send(json.dumps({"ok": False, "error": "that does not look like a PHPSESSID"}).encode(),
+                                          "application/json", 400)
+                    os.makedirs(os.path.dirname(SESSION_FILE), exist_ok=True)
+                    with open(SESSION_FILE, "w", encoding="utf-8") as f:
+                        f.write(val + "\n")
+                    server.commands.put("restart")        # the worker exits cleanly; fly.serve starts it again
+                    self._send(json.dumps({"ok": True}).encode(), "application/json")
                 elif u.path in ("/admin/public", "/admin/tunnel"):
                     if not local:
                         return self._send(b"forbidden", "text/plain", 403)
@@ -399,15 +448,61 @@ class VizServer:
                    "links": [{"url": u, "text": t, "box": b} for (u, t), b in zip(obs["links"], obs["boxes"])]})
 
     def frame(self, jpg: bytes):
-        """Live view of the browser (Chromium screencast: reels spinning, strip scrolling).
-        Each viewer takes the newest frame at its own pace (30 fps local, ~7 fps through a tunnel)."""
-        self.send({"t": "frame", "jpg": base64.b64encode(jpg).decode()}, drop_if_busy=True)
+        """Live view of the browser (Chromium screencast). Served as MJPEG at /stream.mjpg; every viewer
+        takes the newest frame at its own pace (~60 fps local, ~8 fps through a tunnel)."""
+        with self.frame_cv:
+            self.latest_jpg = jpg
+            self.frame_seq += 1
+            self.frame_cv.notify_all()
 
     def decision(self, probs: np.ndarray, action: int, rate: float):
         self.send({"t": "decision", "p": [round(float(x), 4) for x in probs], "a": int(action), "rate": rate})
 
     def reward(self, r: float, total: float, done: bool, casino: dict | None = None):
+        if casino and casino.get("bet") is not None:
+            d = casino.get("drive") or {}
+            row = {"ts": round(time.time(), 1), "r": round(float(r), 3), "bet": casino.get("bet"), "win": casino.get("win"),
+                   "bank": casino.get("balance"), "desire": d.get("desire"), "slot": d.get("name")}
+            with self.lock:
+                self.history.append(row)
+                self.history = self.history[-5000:]
+            casino = dict(casino, row=row)
         self.send({"t": "reward", "r": r, "total": total, "done": done, "casino": casino})
+
+    def _load_history(self):
+        """Spins of the current bank session from data/dopamine.csv (rows after the last refill/reset)."""
+        try:
+            import csv
+            from .drive import STATE
+            since = 0.0
+            try:
+                with open(STATE, encoding="utf-8") as f:
+                    since = float(json.load(f).get("since_ts", 0.0))
+            except (OSError, ValueError):
+                pass
+            with open(LOGCSV, encoding="utf-8") as f:
+                rows = list(csv.DictReader(f))
+            out = []
+            for x in rows:
+                try:
+                    ts = float(x["ts"])
+                    if ts < since:
+                        continue
+                    extra = x.get(None) or []          # rows written after the bank/desire columns were added to an old file
+                    bank = x.get("bank") or (extra[0] if len(extra) > 0 else None)
+                    desire = x.get("desire") or (extra[1] if len(extra) > 1 else None)
+                    out.append({"ts": ts, "r": float(x["reward"]), "bet": float(x["bet"]), "win": float(x["win"]),
+                                "bank": float(bank) if bank else None, "desire": float(desire) if desire else None, "slot": None})
+                except (KeyError, ValueError):
+                    continue
+            self.history = out[-5000:]
+        except OSError:
+            self.history = []
+
+    def clear_history(self):
+        with self.lock:
+            self.history = []
+        self.send({"t": "reset"})
 
     def set_state(self, **kw):
         self.state.update(kw)

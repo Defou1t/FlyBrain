@@ -63,6 +63,14 @@ class Readout:
             self.W += self.lr * np.outer(x, g)
             self.b += self.lr * g
 
+    def reset(self, seed: int = 0):
+        """Forget what was learned: fresh random readout (and the checkpoint on disk)."""
+        rng = np.random.default_rng(seed)
+        self.W = rng.standard_normal(self.W.shape).astype(np.float32) * 0.01
+        self.b[:] = 0
+        self.value = 0.0
+        self.save()
+
     def save(self):
         if self.path:
             np.savez(self.path, W=self.W, b=self.b, value=self.value)

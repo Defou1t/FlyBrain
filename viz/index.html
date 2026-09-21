@@ -1,53 +1,61 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Муха в браузере — живой мозг</title>
+<link rel="icon" href="data:,">
+<title>FlyBrain — a fly's brain in a browser</title>
 <style>
-  :root { --bg:#07090f; --panel:#0e1220; --line:#1c2338; --fg:#d6dcf0; --dim:#7b85a6;
-          --acc:#ffb347; --ok:#5ee29a; --bad:#ff5c7a; --cyan:#57d6ff; --chrome:#202124; --chrome2:#35363a; }
+  :root { --bg:#06080e; --panel:#0c1019; --line:#181e30; --fg:#dde3f4; --dim:#7c86a8; --dim2:#4c5573;
+          --acc:#ffb347; --ok:#5ee29a; --bad:#ff5c7a; --cyan:#57d6ff; --pink:#ff4dd2; --gold:#ffd93b; --chrome:#202124; --chrome2:#35363a; }
   * { box-sizing:border-box; }
   html, body { height:100%; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.45 "Segoe UI", system-ui, sans-serif; overflow:auto; }
+  body { margin:0; background:radial-gradient(1200px 700px at 30% 0%, #0d1224 0%, var(--bg) 60%); color:var(--fg); font:13px/1.45 "Segoe UI", system-ui, sans-serif; overflow:auto; }
   #desk { position:relative; min-width:100%; min-height:100%; }
   /* ---- floating cards: drag by the header, resize by the corner, snap to each other ---- */
-  .card { position:absolute; background:var(--panel); border:1px solid var(--line); border-radius:10px; display:flex; flex-direction:column; min-width:160px; min-height:60px; resize:both; overflow:hidden; box-shadow:0 8px 30px rgba(0,0,0,.45); z-index:2; }
+  .card { position:absolute; background:var(--panel); border:1px solid var(--line); border-radius:12px; display:flex; flex-direction:column; min-width:160px; min-height:60px; resize:both; overflow:hidden; box-shadow:0 10px 34px rgba(0,0,0,.5); z-index:2; }
   .card.dragging { z-index:5; box-shadow:0 16px 50px rgba(0,0,0,.7), 0 0 0 1px var(--cyan); opacity:.96; }
   .card.snap { box-shadow:0 8px 30px rgba(0,0,0,.45), 0 0 0 1px var(--acc); }
-  .card-h { display:flex; align-items:center; gap:6px; height:26px; padding:0 8px 0 10px; background:#0a0d18; border-bottom:1px solid var(--line); cursor:grab; user-select:none; font-size:10.5px; font-weight:600; letter-spacing:.7px; text-transform:uppercase; color:var(--dim); flex:none; }
+  .card-h { display:flex; align-items:center; gap:6px; height:26px; padding:0 8px 0 11px; background:rgba(8,11,20,.9); border-bottom:1px solid var(--line); cursor:grab; user-select:none; font-size:10.5px; font-weight:600; letter-spacing:.8px; text-transform:uppercase; color:var(--dim); flex:none; }
   .card-h:active { cursor:grabbing; }
   .card-h .sp { flex:1; }
+  .card-h .sub { font-weight:400; text-transform:none; letter-spacing:0; }
   .card-h button { background:none; border:0; color:var(--dim); cursor:pointer; font-size:12px; padding:0 3px; line-height:1; }
   .card-h button:hover { color:var(--fg); }
   .card-b { flex:1; min-height:0; padding:8px 10px; overflow:auto; position:relative; }
   .card-b.tight { padding:4px 6px; }
-  .card.glass { background:rgba(14,18,32,.55); }
+  .card.glass { background:rgba(10,13,22,.55); }
   .card.glass .card-b { overflow:visible; }
-  #hint { position:fixed; right:14px; bottom:8px; font-size:10.5px; color:#4b5470; z-index:3; pointer-events:none; }
+  #hint { position:fixed; right:14px; bottom:8px; font-size:10.5px; color:var(--dim2); z-index:3; pointer-events:none; }
   #hint b { color:#6b7590; font-weight:500; }
-  #layoutbtn { position:fixed; right:14px; top:8px; z-index:6; background:#141a2c; color:var(--dim); border:1px solid var(--line); border-radius:12px; padding:2px 10px; font-size:11px; cursor:pointer; }
+  #topbtns { position:fixed; right:14px; top:8px; z-index:6; display:flex; gap:6px; }
+  #topbtns button { background:#121828; color:var(--dim); border:1px solid var(--line); border-radius:12px; padding:2px 10px; font-size:11px; cursor:pointer; }
+  #topbtns button:hover { color:var(--fg); }
+  #topbtns button.on { color:var(--fg); border-color:#334066; }
 
   /* brain card */
   #card-brain .card-b { padding:0; }
   #dragpad { position:absolute; inset:0; cursor:grab; }
   #dragpad:active { cursor:grabbing; }
-  #brainfoot { position:absolute; left:0; right:0; bottom:0; padding:4px 10px; font-size:10.5px; color:var(--dim); background:linear-gradient(transparent, rgba(7,9,15,.85)); pointer-events:none; }
+  #brainfoot { position:absolute; left:0; right:0; bottom:0; padding:4px 10px; font-size:10.5px; color:var(--dim); background:linear-gradient(transparent, rgba(6,8,14,.9)); pointer-events:none; }
   #brainfoot b { color:var(--fg); font-weight:500; }
-  #legend { position:absolute; left:8px; top:6px; display:flex; flex-wrap:wrap; gap:3px 9px; font-size:10px; color:var(--dim); pointer-events:none; }
+  #legend { position:absolute; left:10px; top:6px; display:flex; flex-wrap:wrap; gap:3px 10px; font-size:10px; color:var(--dim); pointer-events:none; }
   #legend i { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:4px; vertical-align:-1px; }
+  #legend .st { margin-left:auto; }
   /* fly card */
   #card-fly .card-b { padding:0; }
   .flylabel { position:absolute; left:0; right:0; bottom:38px; text-align:center; font-size:11px; color:var(--dim); pointer-events:none; }
   .flylabel b { color:var(--fg); font-weight:600; }
   .remote { position:absolute; left:10px; right:10px; bottom:8px; display:flex; align-items:center; gap:8px; font-size:11px; color:var(--dim); }
-  .remote button { background:#141a2c; color:var(--fg); border:1px solid var(--line); border-radius:12px; padding:2px 10px; font-size:11px; cursor:pointer; }
+  .remote button { background:#121828; color:var(--fg); border:1px solid var(--line); border-radius:12px; padding:2px 10px; font-size:11px; cursor:pointer; }
   .remote button.on { color:var(--ok); border-color:#2b5a45; }
   .remote code { font-size:10.5px; color:var(--cyan); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  #gear { position:fixed; z-index:30; background:#0e1220; border:1px solid var(--line); border-radius:10px; padding:8px; box-shadow:0 12px 40px rgba(0,0,0,.6); display:none; flex-direction:column; gap:4px; min-width:200px; }
+  #gear { position:fixed; z-index:30; background:#0c1019; border:1px solid var(--line); border-radius:10px; padding:8px; box-shadow:0 12px 40px rgba(0,0,0,.6); display:none; flex-direction:column; gap:4px; min-width:230px; }
   #gear .gear-title { font-size:11px; color:var(--dim); letter-spacing:.6px; text-transform:uppercase; padding:2px 6px 4px; }
-  #gear button { background:#141a2c; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:12.5px; text-align:left; cursor:pointer; }
+  #gear button { background:#121828; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 10px; font-size:12.5px; text-align:left; cursor:pointer; }
   #gear button:hover { border-color:var(--cyan); }
   #gear button.on { color:var(--acc); border-color:#5a4520; }
+  #gear button.danger { color:var(--bad); }
+  #gear hr { border:0; border-top:1px solid var(--line); margin:3px 0; }
   #gl.hit { pointer-events:auto; cursor:pointer; }
 
   /* browser card */
@@ -64,13 +72,14 @@
   .plus { color:#9aa0a6; font-size:18px; margin-left:2px; }
   .sess { margin-left:auto; font-size:11px; color:#9aa0a6; padding:3px 8px; border:1px solid #3c3f45; border-radius:12px; white-space:nowrap; }
   .sess.on { color:#5ee29a; border-color:#2b5a45; }
+  .fps { font-size:10.5px; color:#9aa0a6; font-family:Consolas, monospace; white-space:nowrap; }
   .bar.nav { height:38px; padding:0 10px; background:var(--chrome2); }
   .btn { color:#9aa0a6; width:26px; height:26px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:15px; }
   .omni { flex:1; height:28px; background:#202124; border-radius:14px; display:flex; align-items:center; gap:8px; padding:0 12px; color:#e8eaed; font-size:12.5px; min-width:0; }
   .omni .lock { color:#9aa0a6; font-size:11px; }
   .omni span#url { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  #viewport { position:relative; width:100%; aspect-ratio:1280/800; background:#fff; overflow:hidden; }
-  #shot { position:absolute; inset:0; width:100%; height:100%; display:block; }
+  #viewport { position:relative; width:100%; aspect-ratio:1280/800; background:#000; overflow:hidden; }
+  #shot, #live { position:absolute; inset:0; width:100%; height:100%; display:block; object-fit:fill; }
   #overlay { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
   #tip { position:absolute; display:none; padding:3px 8px; background:rgba(20,22,30,.92); color:var(--acc); border:1px solid var(--acc); border-radius:4px; font-size:11.5px; white-space:nowrap; pointer-events:none; transform:translate(-50%, -140%); }
   .bar.status { height:24px; padding:0 12px; background:var(--chrome); font-size:11px; color:#9aa0a6; justify-content:space-between; }
@@ -78,14 +87,14 @@
 
   /* stats */
   .tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(78px, 1fr)); gap:6px; }
-  .tiles div { background:#0a0d18; border:1px solid var(--line); border-radius:6px; padding:5px 8px; min-width:0; }
+  .tiles div { background:#090c15; border:1px solid var(--line); border-radius:8px; padding:5px 8px; min-width:0; }
   .tiles b { display:block; font-size:15px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .tiles span { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.5px; }
   .grp { display:grid; grid-template-columns:118px 1fr 40px; gap:8px; align-items:center; font-size:11px; color:var(--dim); padding:1px 0; }
-  .grp .b { height:6px; background:#141a2c; border-radius:3px; overflow:hidden; }
+  .grp .b { height:6px; background:#121828; border-radius:3px; overflow:hidden; }
   .grp .b i { display:block; height:100%; width:0; transition:width .15s; }
   .grp .v { text-align:right; font-family:Consolas, monospace; }
-  canvas.wide { width:100%; height:100%; display:block; border-radius:4px; background:#0a0d18; }
+  canvas.wide { width:100%; height:100%; display:block; border-radius:6px; background:#090c15; }
   .link { display:grid; grid-template-columns:28px 1fr 42px; gap:8px; align-items:center; padding:2px 4px; border-radius:4px; font-size:11.5px; }
   .link .i { color:var(--dim); font-family:Consolas, monospace; }
   .link .t { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--fg); }
@@ -101,67 +110,95 @@
   #drive .muted { font-size:11px; color:var(--dim); margin:4px 0; }
   #events { font-family:Consolas, monospace; font-size:10.5px; margin:4px 0; }
   #events div { padding:1px 0; color:var(--dim); }
-  #events .goal { color:var(--ok); } #events .lucky { color:#ffd93b; } #events .bust, #events .broke { color:var(--bad); } #events .switch { color:var(--cyan); } #events .refill { color:var(--ok); }
+  #events .goal { color:var(--ok); } #events .lucky { color:var(--gold); } #events .bust, #events .broke { color:var(--bad); } #events .switch { color:var(--cyan); } #events .refill { color:var(--ok); }
   #slots { display:grid; grid-template-columns:1fr auto auto auto; gap:1px 8px; font-size:10.5px; color:var(--dim); }
   #slots .n { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  #slots .lucky { color:#ffd93b; } #slots .unlucky { color:var(--bad); }
-  #dopawrap { height:110px; margin:6px 0; }
+  #slots .lucky { color:var(--gold); } #slots .unlucky { color:var(--bad); }
+  /* dopamine card */
+  #card-dopa .card-b { display:flex; flex-direction:column; padding:6px 8px; }
+  #dopalegend { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:10.5px; color:var(--dim); padding:0 2px 4px; }
+  #dopalegend i { display:inline-block; width:10px; height:3px; margin-right:5px; vertical-align:middle; border-radius:2px; }
+  #dopalegend i.bar { height:8px; width:5px; }
+  #dopawrap { flex:1; min-height:60px; }
+  #dopastats { display:flex; gap:12px; font-size:10.5px; color:var(--dim); padding:4px 2px 0; font-family:Consolas, monospace; flex-wrap:wrap; }
+  #dopastats b { color:var(--fg); font-weight:500; }
 
   #gl { position:fixed; left:0; top:0; width:100vw; height:100vh; pointer-events:none; z-index:10; }   /* explicit size: with Windows scaling (DPR 1.25/1.5) the backing store is bigger than the window and would stretch the canvas */
   #flash { position:fixed; inset:0; pointer-events:none; opacity:0; transition:opacity .25s; z-index:5; }
-  #wait { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); color:var(--dim); font-size:14px; z-index:6; background:rgba(7,9,15,.85); padding:8px 14px; border-radius:6px; }
+  #wait { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); color:var(--dim); font-size:14px; z-index:6; background:rgba(6,8,14,.85); padding:8px 14px; border-radius:6px; }
+  /* first run: your own session cookie */
+  #session { position:fixed; z-index:40; left:50%; top:50%; transform:translate(-50%,-50%); width:min(520px, 92vw); background:#0c1019; border:1px solid #2a3350; border-radius:12px; padding:16px 18px; box-shadow:0 20px 60px rgba(0,0,0,.7); display:none; }
+  #session h3 { margin:0 0 6px; font-size:15px; }
+  #session p { margin:6px 0; font-size:12px; color:var(--dim); }
+  #session ol { margin:6px 0 8px 18px; padding:0; font-size:12px; color:var(--dim); }
+  #session input { width:100%; background:#090c15; border:1px solid var(--line); color:var(--fg); border-radius:6px; padding:7px 9px; font:13px Consolas, monospace; }
+  #session .row { display:flex; gap:8px; margin-top:10px; align-items:center; }
+  #session button { background:#121828; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 12px; cursor:pointer; }
+  #session button.primary { border-color:var(--acc); color:var(--acc); }
+  #session .err { color:var(--bad); font-size:11.5px; }
 </style>
 </head>
 <body>
 <div id="desk">
-  <div class="card glass" id="card-brain" data-id="brain"><div class="card-h"><span>Мозг мухи · MaleCNS</span><span class="sp"></span><span id="hudline" style="font-weight:400;text-transform:none;letter-spacing:0"></span><button class="max" title="развернуть">⤢</button></div>
-    <div class="card-b"><div id="dragpad" title="вращать мозг"></div>
+  <div class="card glass" id="card-brain" data-id="brain"><div class="card-h"><span data-i18n="brain_title">Fly brain · MaleCNS</span><span class="sp"></span><span id="hudline" class="sub"></span><button class="max" data-i18n-title="maximize" title="maximize">⤢</button></div>
+    <div class="card-b"><div id="dragpad" data-i18n-title="rotate_brain" title="drag to rotate"></div>
       <div id="legend">
-        <span><i style="background:#4d8dff"></i>зрительные</span><span><i style="background:#b57bff"></i>центр</span><span><i style="background:#4de08a"></i>VNC</span>
-        <span><i style="background:#ffb347"></i>DN</span><span><i style="background:#ff5c5c"></i>моторные</span><span><i style="background:#57f0ff"></i>сетчатка</span>
+        <span><i style="background:#5d74b8"></i><span data-i18n="l_rest">resting</span></span><span><i style="background:#ffb347"></i><span data-i18n="l_stim">stimulated</span></span><span><i style="background:#fff3d6"></i><span data-i18n="l_fire">firing</span></span>
         <span><i style="background:#ff4dd2"></i>PPL101 −</span><span><i style="background:#ffd93b"></i>PAM +</span>
       </div>
-      <div id="brainfoot">загрузка нейронов…</div>
+      <div id="brainfoot" data-i18n="loading_neurons">loading neurons…</div>
     </div></div>
-  <div class="card glass" id="card-fly" data-id="fly"><div class="card-h"><span>Drosophila</span><span class="sp"></span><span style="font-weight:400;text-transform:none;letter-spacing:0">клик по мухе — меню</span></div>
+  <div class="card glass" id="card-fly" data-id="fly"><div class="card-h"><span>Drosophila</span><span class="sp"></span><span class="sub" data-i18n="click_fly">click the fly — menu</span></div>
     <div class="card-b">
-      <div class="flylabel" id="flylabel"><b>Drosophila</b> · парит</div>
-      <div class="remote" id="remote" style="display:none"><span>туннель</span><button id="tunbtn">выкл</button><code id="tunurl"></code></div>
+      <div class="flylabel" id="flylabel"><b>Drosophila</b> · …</div>
+      <div class="remote" id="remote" style="display:none"><span data-i18n="tunnel">tunnel</span><button id="tunbtn">off</button><code id="tunurl"></code></div>
     </div></div>
 
-  <div class="card" id="card-browser" data-id="browser"><div class="card-h"><span>Браузер мухи</span><span class="sp"></span><button class="max" title="развернуть">⤢</button></div>
+  <div class="card" id="card-browser" data-id="browser"><div class="card-h"><span data-i18n="browser_title">The fly's browser</span><span class="sp"></span><span class="fps" id="fps"></span><button class="max" data-i18n-title="maximize" title="maximize">⤢</button></div>
     <div class="card-b"><div id="browser">
-      <div class="bar title"><span class="dots"><i></i><i></i><i></i></span><div class="tab"><img id="fav" alt=""><span id="tabtitle">Новая вкладка</span><b>×</b></div><span class="plus">+</span><span class="sess" id="sess">гость</span></div>
+      <div class="bar title"><span class="dots"><i></i><i></i><i></i></span><div class="tab"><img id="fav" alt=""><span id="tabtitle" data-i18n="new_tab">New tab</span><b>×</b></div><span class="plus">+</span><span class="sess" id="sess" data-i18n="guest">guest</span></div>
       <div class="bar nav"><span class="btn">←</span><span class="btn">→</span><span class="btn">⟳</span><div class="omni"><span class="lock">🔒</span><span id="url">about:blank</span></div><span class="btn">⋮</span></div>
-      <div id="viewport"><img id="shot" alt=""><canvas id="overlay"></canvas><div id="tip"></div></div>
-      <div class="bar status"><span id="status">ожидание симуляции…</span><span id="inline"></span></div>
+      <div id="viewport"><img id="shot" alt=""><img id="live" alt="" style="display:none"><canvas id="overlay"></canvas><div id="tip"></div></div>
+      <div class="bar status"><span id="status" data-i18n="waiting">waiting for the simulation…</span><span id="inline"></span></div>
     </div></div></div>
 
-  <div class="card" id="card-state" data-id="state"><div class="card-h"><span>Состояние</span><span class="sp"></span><button class="max">⤢</button></div>
-    <div class="card-b"><div class="tiles"><div><b id="s-ep">0</b><span>эпизод</span></div><div><b id="s-step">0</b><span>шаг</span></div><div><b id="s-rate">—</b><span>активность</span></div><div><b id="s-ret">0</b><span>награда</span></div></div></div></div>
-  <div class="card" id="card-casino" data-id="casino"><div class="card-h"><span>Банк мухи · азарт</span><span class="sp"></span><button class="max">⤢</button></div>
+  <div class="card" id="card-state" data-id="state"><div class="card-h"><span data-i18n="state_title">State</span><span class="sp"></span><button class="max">⤢</button></div>
+    <div class="card-b"><div class="tiles"><div><b id="s-ep">0</b><span data-i18n="episode">episode</span></div><div><b id="s-step">0</b><span data-i18n="step">step</span></div><div><b id="s-rate">—</b><span data-i18n="activity">activity</span></div><div><b id="s-ret">0</b><span data-i18n="reward">reward</span></div></div></div></div>
+  <div class="card" id="card-dopa" data-id="dopa"><div class="card-h"><span data-i18n="dopa_title">Dopamine · appetite · winnings</span><span class="sp"></span><button class="max">⤢</button></div>
     <div class="card-b">
-      <div class="tiles"><div><b id="c-bal">—</b><span>банк FUN</span></div><div><b id="c-bet">—</b><span>ставка</span></div><div><b id="c-win">—</b><span>выигрыш</span></div><div><b id="c-demo">—</b><span>демо-счёт</span></div></div>
-      <div class="tiles" style="margin-top:6px"><div title=""><b id="c-min" style="color:var(--bad)">—</b><span id="c-min-l">мин. банк</span></div><div title=""><b id="c-max" style="color:var(--ok)">—</b><span id="c-max-l">макс. банк</span></div><div><b id="c-spins">—</b><span>спинов</span></div><div><b id="c-since">—</b><span>сессия с</span></div></div>
+      <div id="dopalegend"><span><i class="bar" style="background:#ffd93b"></i><span data-i18n="lg_pam">dopamine + (PAM, win)</span></span><span><i class="bar" style="background:#ff4dd2"></i><span data-i18n="lg_ppl">dopamine − (PPL101, loss)</span></span><span><i style="background:#ffb347"></i><span data-i18n="lg_desire">appetite (drive)</span></span><span><i style="background:#5ee29a"></i><span data-i18n="lg_bank">bank (winnings)</span></span></div>
       <div id="dopawrap"><canvas id="dopa" class="wide"></canvas></div>
+      <div id="dopastats"></div>
+    </div></div>
+  <div class="card" id="card-casino" data-id="casino"><div class="card-h"><span data-i18n="casino_title">The fly's bank</span><span class="sp"></span><button class="max">⤢</button></div>
+    <div class="card-b">
+      <div class="tiles"><div><b id="c-bal">—</b><span data-i18n="bank">bank FUN</span></div><div><b id="c-bet">—</b><span data-i18n="bet">stake</span></div><div><b id="c-win">—</b><span data-i18n="win">win</span></div><div><b id="c-demo">—</b><span data-i18n="demo">demo balance</span></div></div>
+      <div class="tiles" style="margin-top:6px"><div title=""><b id="c-min" style="color:var(--bad)">—</b><span id="c-min-l" data-i18n="bank_min">min bank</span></div><div title=""><b id="c-max" style="color:var(--ok)">—</b><span id="c-max-l" data-i18n="bank_max">max bank</span></div><div><b id="c-spins">—</b><span data-i18n="spins">spins</span></div><div><b id="c-since">—</b><span data-i18n="since">session since</span></div></div>
       <div id="drive">
-        <div class="grp"><span>азарт</span><div class="b"><i id="desire-bar" style="background:linear-gradient(90deg,#ff5c7a,#ffd93b,#5ee29a)"></i></div><span class="v" id="desire-v">—</span></div>
-        <div id="slotline" class="muted">ждёт казино…</div>
+        <div class="grp" style="margin-top:6px"><span data-i18n="appetite">appetite</span><div class="b"><i id="desire-bar" style="background:linear-gradient(90deg,#ff5c7a,#ffd93b,#5ee29a)"></i></div><span class="v" id="desire-v">—</span></div>
+        <div id="slotline" class="muted" data-i18n="waiting_casino">waiting for the casino…</div>
         <div id="events"></div>
         <div id="slots"></div>
       </div>
     </div></div>
-  <div class="card" id="card-groups" data-id="groups"><div class="card-h"><span>Активность по отделам мозга</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b"><div id="groups"></div></div></div>
-  <div class="card" id="card-raster" data-id="raster"><div class="card-h"><span>Спайки readout: 512 DN + 512 моторных</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b tight"><canvas id="raster" class="wide"></canvas></div></div>
-  <div class="card" id="card-trace" data-id="trace"><div class="card-h"><span>Доля активных нейронов · награды</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b tight"><canvas id="trace" class="wide"></canvas></div></div>
-  <div class="card" id="card-links" data-id="links"><div class="card-h"><span>Решение — softmax</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b" id="links"></div></div>
-  <div class="card" id="card-log" data-id="log"><div class="card-h"><span>Журнал</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b" id="log"></div></div>
+  <div class="card" id="card-groups" data-id="groups"><div class="card-h"><span data-i18n="groups_title">Activity by brain region</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b"><div id="groups"></div></div></div>
+  <div class="card" id="card-raster" data-id="raster"><div class="card-h"><span data-i18n="raster_title">Readout spikes: 512 DN + 512 motor</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b tight"><canvas id="raster" class="wide"></canvas></div></div>
+  <div class="card" id="card-trace" data-id="trace"><div class="card-h"><span data-i18n="trace_title">Active neurons · rewards</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b tight"><canvas id="trace" class="wide"></canvas></div></div>
+  <div class="card" id="card-links" data-id="links"><div class="card-h"><span data-i18n="links_title">Decision — softmax</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b" id="links"></div></div>
+  <div class="card" id="card-log" data-id="log"><div class="card-h"><span data-i18n="log_title">Log</span><span class="sp"></span><button class="max">⤢</button></div><div class="card-b" id="log"></div></div>
 </div>
-<button id="layoutbtn" title="вернуть карточки на места">↺ раскладка</button>
-<div id="hint"><b>карточки</b> двигаются за заголовок, тянутся за правый нижний угол, прилипают друг к другу · ⤢ развернуть</div>
-<div id="gear"><div class="gear-title">⚙ муха</div><button id="g-anim">Остановить полёт</button><button id="g-pause">Прогнать</button><button id="g-mode">Крутить слоты</button><button id="g-refill" style="display:none">Дать 50 000 FUN</button></div>
+<div id="topbtns"><button id="langbtn" title="language">EN</button><button id="layoutbtn" data-i18n="layout_btn" data-i18n-title="layout_title">↺ layout</button></div>
+<div id="hint" data-i18n-html="hint"><b>cards</b> drag by the header, resize by the corner, snap to each other · ⤢ maximize</div>
+<div id="gear"><div class="gear-title" data-i18n="gear_title">⚙ the fly</div><button id="g-anim"></button><button id="g-pause"></button><button id="g-mode"></button><button id="g-refill" style="display:none" data-i18n="g_refill">Give 50 000 FUN</button><hr><button id="g-session" data-i18n="g_session">Use my own account (PHPSESSID)…</button><button id="g-reset" class="danger" data-i18n="g_reset">Reset results &amp; memory…</button></div>
 <div id="flash"></div>
-<div id="wait">ожидание симуляции…</div>
+<div id="wait" data-i18n="waiting">waiting for the simulation…</div>
+<div id="session">
+  <h3 data-i18n="s_title">Your own account for the fly</h3>
+  <p data-i18n="s_p1">The fly plays demo slots as a guest. To let it browse as <b>your</b> account, give it the PHPSESSID cookie of your own session on betking.com.ua — never somebody else's.</p>
+  <ol data-i18n-html="s_steps"><li>Log in to betking.com.ua in your browser</li><li>DevTools (F12) → Application → Cookies → betking.com.ua → PHPSESSID</li><li>Paste the value below (it is stored only in data/session.txt on this computer)</li></ol>
+  <input id="s-val" placeholder="PHPSESSID" autocomplete="off" spellcheck="false">
+  <div class="row"><button class="primary" id="s-save" data-i18n="s_save">Save and restart the fly</button><button id="s-skip" data-i18n="s_skip">Keep playing as a guest</button><span class="err" id="s-err"></span></div>
+</div>
 <canvas id="gl"></canvas>
 
 <script src="/assets/three.min.js"></script>
@@ -171,18 +208,111 @@ const $ = id => document.getElementById(id);
 const PX_W = 1280, PX_H = 800;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+// ================================================================== i18n: English, with a Ukrainian translation
+const I18N = {
+  en: {
+    brain_title: 'Fly brain · MaleCNS', maximize: 'maximize', rotate_brain: 'drag to rotate', l_rest: 'resting', l_stim: 'stimulated', l_fire: 'firing',
+    loading_neurons: 'loading neurons…', click_fly: 'click the fly — menu', tunnel: 'tunnel', on: 'on', off: 'off', tunnel_serve: 'the tunnel is managed by fly.serve',
+    browser_title: "The fly's browser", new_tab: 'New tab', guest: 'guest', logged_in: 'session: logged in', waiting: 'waiting for the simulation…',
+    state_title: 'State', episode: 'episode', step: 'step', activity: 'activity', reward: 'reward',
+    dopa_title: 'Dopamine · appetite · winnings', lg_pam: 'dopamine + (PAM, win)', lg_ppl: 'dopamine − (PPL101, loss)', lg_desire: 'appetite (drive)', lg_bank: 'bank (winnings)',
+    casino_title: "The fly's bank", bank: 'bank FUN', bet: 'stake', win: 'win', demo: 'demo balance', bank_min: 'min bank', bank_max: 'max bank', spins: 'spins', since: 'session since',
+    appetite: 'appetite', waiting_casino: 'waiting for the casino…', groups_title: 'Activity by brain region', raster_title: 'Readout spikes: 512 DN + 512 motor',
+    trace_title: 'Active neurons · rewards', links_title: 'Decision — softmax', log_title: 'Log', layout_btn: '↺ layout', layout_title: 'put the cards back',
+    hint: '<b>cards</b> drag by the header, resize by the corner, snap to each other · ⤢ maximize',
+    gear_title: '⚙ the fly', g_refill: 'Give 50 000 FUN', g_session: 'Use my own account (PHPSESSID)…', g_reset: 'Reset results & memory…',
+    g_stop_flight: 'Stop flying (walk)', g_resume_flight: 'Fly again', g_shoo: 'Shoo away', g_back: 'Let it work', g_casino: 'Spin the slots', g_browse: 'Wander the site',
+    s_title: 'Your own account for the fly', s_p1: 'The fly plays demo slots as a guest. To let it browse as <b>your</b> account, give it the PHPSESSID cookie of your own session on betking.com.ua — never somebody else\'s.',
+    s_steps: '<li>Log in to betking.com.ua in your browser</li><li>DevTools (F12) → Application → Cookies → betking.com.ua → PHPSESSID</li><li>Paste the value below (it is stored only in data/session.txt on this computer)</li>',
+    s_save: 'Save and restart the fly', s_skip: 'Keep playing as a guest', s_bad: 'that does not look like a PHPSESSID', s_saved: 'cookie saved — the fly restarts with it',
+    reset_confirm: 'Reset the fly? Bank back to 50 000 FUN, slot memory, learned readout weights, the dopamine log and the charts all start over.',
+    reset_done: 'reset: results and memory cleared',
+    groups: ['other', 'optic lobes', 'central brain', 'VNC', 'descending', 'motor', 'retina', 'dopamine PPL101 (−)', 'dopamine PAM (+)'],
+    neurons: 'neurons', synapses: 'synapses', strongest: 'strongest now', bright: 'bright neurons',
+    fly_hover: 'hovering', fly_walk: 'walking', fly_fly: 'flying to the target', fly_landed: 'landed on the target', fly_smoke: 'broke — smoking, waiting for money', fly_shooed: 'shooed away — sitting and waiting',
+    fly_lobby: 'looking for a slot', fly_slots: 'spinning the slots', fly_look: 'looking at the page', fly_explore: 'figuring out an unknown game',
+    st_bank: 'bank {0} FUN · stake {1} · win {2}', st_look: 'looking at the page — retina → optic lobes → descending neurons', st_click: 'click: {0}',
+    inline: 'episode {0} · step {1} · {2} {3}', actions: 'actions', links: 'links', click: '← click',
+    log_page: 'page: {0}  ({1} links)', log_lobby: 'lobby: bank {0} FUN, {1} actions', log_slot: 'slot: bank {0} FUN, {1} actions', log_decision: 'decision: #{0} {1}  p={2}%', hidden_link: ' (hidden menu link)',
+    log_spin_loss: 'spin: {0} FUN → PPL101 (aversive dopamine {1})', log_spin_win: 'spin: +{0} FUN → PAM (dopamine +{1})', log_reward_neg: 'reward {0} → PPL101', log_reward_pos: 'reward +{0} → PAM',
+    log_cmd: 'command to the fly: {0}', log_walk: 'the fly walks', log_fly: 'the fly flies again', tunnel_err: 'tunnel: {0}', tunnel_open: 'tunnel open: {0}', tunnel_closed: 'tunnel closed',
+    reconnect: 'the fly is restarting… reconnecting', broke_line: 'bank empty — {0}: {1} spins, {2} FUN · waiting for money', choosing: 'choosing a slot…', exploring: 'unknown game — exploring',
+    sl_spins: '{0} spins', sl_streak_loss: 'streak {0} dead', sl_streak_win: 'streak {0} wins', sl_wants: 'wants stake {0}',
+    reasons: { streak: '6 dead spins in a row', bored: 'lost interest', bust: 'bust', broke: 'out of money', unplayable: 'could not figure the game out' },
+    ev: { goal: '🎯 goal +15%', lucky: '🍀 lucky slot', bust: '💸 bust', switch: '↪ slot change', broke: '🚬 out of money', refill: '💰 money given' },
+    th_slot: 'slot', th_spins: 'spins', th_net: 'net', th_best: 'best',
+    dopa_empty: 'dopamine per spin (bars), appetite and bank (lines) — history survives page reloads',
+    ds_spins: 'spins', ds_hit: 'hit rate', ds_dopa: 'Σ dopamine', ds_net: 'net', ds_desire: 'appetite', ds_corr: 'appetite↔bank corr.',
+    lang_switched: 'language: English',
+  },
+  uk: {
+    brain_title: 'Мозок мухи · MaleCNS', maximize: 'розгорнути', rotate_brain: 'тягніть, щоб обертати', l_rest: 'спокій', l_stim: 'стимульовані', l_fire: 'спайки',
+    loading_neurons: 'завантаження нейронів…', click_fly: 'клік по мусі — меню', tunnel: 'тунель', on: 'увімк', off: 'вимк', tunnel_serve: 'тунелем керує fly.serve',
+    browser_title: 'Браузер мухи', new_tab: 'Нова вкладка', guest: 'гість', logged_in: 'сесія: увійшла', waiting: 'очікування симуляції…',
+    state_title: 'Стан', episode: 'епізод', step: 'крок', activity: 'активність', reward: 'винагорода',
+    dopa_title: 'Дофамін · азарт · виграші', lg_pam: 'дофамін + (PAM, виграш)', lg_ppl: 'дофамін − (PPL101, програш)', lg_desire: 'азарт (мотивація)', lg_bank: 'банк (виграші)',
+    casino_title: 'Банк мухи', bank: 'банк FUN', bet: 'ставка', win: 'виграш', demo: 'демо-рахунок', bank_min: 'мін. банк', bank_max: 'макс. банк', spins: 'спінів', since: 'сесія з',
+    appetite: 'азарт', waiting_casino: 'чекає на казино…', groups_title: 'Активність за відділами мозку', raster_title: 'Спайки readout: 512 DN + 512 моторних',
+    trace_title: 'Активні нейрони · винагороди', links_title: 'Рішення — softmax', log_title: 'Журнал', layout_btn: '↺ розкладка', layout_title: 'повернути картки на місця',
+    hint: '<b>картки</b> тягнуться за заголовок, розтягуються за правий нижній кут, прилипають одна до одної · ⤢ розгорнути',
+    gear_title: '⚙ муха', g_refill: 'Дати 50 000 FUN', g_session: 'Мій власний акаунт (PHPSESSID)…', g_reset: 'Скинути результати й пам\'ять…',
+    g_stop_flight: 'Зупинити політ (ходити)', g_resume_flight: 'Знову літати', g_shoo: 'Прогнати', g_back: 'Хай працює', g_casino: 'Крутити слоти', g_browse: 'Гуляти сайтом',
+    s_title: 'Ваш власний акаунт для мухи', s_p1: 'Муха грає в демо-слоти як гість. Щоб вона ходила сайтом як <b>ваш</b> акаунт, дайте їй cookie PHPSESSID вашої власної сесії на betking.com.ua — ніколи чужу.',
+    s_steps: '<li>Увійдіть на betking.com.ua у своєму браузері</li><li>DevTools (F12) → Application → Cookies → betking.com.ua → PHPSESSID</li><li>Вставте значення нижче (воно зберігається лише в data/session.txt на цьому комп\'ютері)</li>',
+    s_save: 'Зберегти й перезапустити муху', s_skip: 'Грати далі як гість', s_bad: 'це не схоже на PHPSESSID', s_saved: 'cookie збережено — муха перезапускається з ним',
+    reset_confirm: 'Скинути муху? Банк знову 50 000 FUN, пам\'ять про слоти, навчені ваги readout, журнал дофаміну й графіки починаються спочатку.',
+    reset_done: 'скидання: результати й пам\'ять очищено',
+    groups: ['інші', 'зорові частки', 'центральний мозок', 'VNC', 'низхідні', 'моторні', 'сітківка', 'дофамін PPL101 (−)', 'дофамін PAM (+)'],
+    neurons: 'нейронів', synapses: 'синапсів', strongest: 'зараз найсильніше', bright: 'яскравих нейронів',
+    fly_hover: 'ширяє', fly_walk: 'ходить', fly_fly: 'летить до цілі', fly_landed: 'сіла на ціль', fly_smoke: 'програлася — курить і чекає на гроші', fly_shooed: 'прогнана — сидить і чекає',
+    fly_lobby: 'шукає слот', fly_slots: 'крутить слоти', fly_look: 'дивиться на сторінку', fly_explore: 'розбирається з невідомою грою',
+    st_bank: 'банк {0} FUN · ставка {1} · виграш {2}', st_look: 'дивиться на сторінку — сітківка → зорові частки → низхідні нейрони', st_click: 'клік: {0}',
+    inline: 'епізод {0} · крок {1} · {2} {3}', actions: 'дій', links: 'посилань', click: '← клік',
+    log_page: 'сторінка: {0}  ({1} посилань)', log_lobby: 'лобі: банк {0} FUN, {1} дій', log_slot: 'слот: банк {0} FUN, {1} дій', log_decision: 'рішення: #{0} {1}  p={2}%', hidden_link: ' (приховане посилання в меню)',
+    log_spin_loss: 'спін: {0} FUN → PPL101 (аверсивний дофамін {1})', log_spin_win: 'спін: +{0} FUN → PAM (дофамін +{1})', log_reward_neg: 'винагорода {0} → PPL101', log_reward_pos: 'винагорода +{0} → PAM',
+    log_cmd: 'команда мусі: {0}', log_walk: 'муха ходить пішки', log_fly: 'муха знову літає', tunnel_err: 'тунель: {0}', tunnel_open: 'тунель відкрито: {0}', tunnel_closed: 'тунель закрито',
+    reconnect: 'муха перезапускається… перепідключення', broke_line: 'банк порожній — {0}: {1} спінів, {2} FUN · чекає на гроші', choosing: 'обирає слот…', exploring: 'невідома гра — досліджує',
+    sl_spins: '{0} спінів', sl_streak_loss: 'серія {0} порожніх', sl_streak_win: 'серія {0} виграшів', sl_wants: 'хоче ставку {0}',
+    reasons: { streak: '6 порожніх спінів поспіль', bored: 'пропав азарт', bust: 'злив', broke: 'гроші скінчилися', unplayable: 'не розібралася з грою' },
+    ev: { goal: '🎯 ціль +15%', lucky: '🍀 вдалий слот', bust: '💸 злив', switch: '↪ зміна слота', broke: '🚬 гроші скінчилися', refill: '💰 дали грошей' },
+    th_slot: 'слот', th_spins: 'спіни', th_net: 'підсумок', th_best: 'найкр.',
+    dopa_empty: 'дофамін за спін (стовпчики), азарт і банк (лінії) — історія переживає перезавантаження сторінки',
+    ds_spins: 'спінів', ds_hit: 'частота виграшів', ds_dopa: 'Σ дофамін', ds_net: 'підсумок', ds_desire: 'азарт', ds_corr: 'кореляція азарт↔банк',
+    lang_switched: 'мова: українська',
+  },
+};
+let LANG = 'en';
+try { LANG = localStorage.getItem('fly.lang') === 'uk' ? 'uk' : 'en'; } catch (e) {}
+const t = (key, ...args) => { let s = (I18N[LANG][key] ?? I18N.en[key] ?? key); if (typeof s === 'string') args.forEach((a, i) => { s = s.replace('{' + i + '}', a); }); return s; };
+function applyLang() {
+  document.documentElement.lang = LANG;
+  document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = t(el.dataset.i18n));
+  document.querySelectorAll('[data-i18n-html]').forEach(el => el.innerHTML = t(el.dataset.i18nHtml));
+  document.querySelectorAll('[data-i18n-title]').forEach(el => el.title = t(el.dataset.i18nTitle));
+  $('langbtn').textContent = LANG === 'uk' ? 'UK' : 'EN'; $('langbtn').title = LANG === 'uk' ? 'Switch to English' : 'Перемкнути на українську';
+  if (window.applyState) applyState(flyCtl);
+  if (typeof groupIdx !== 'undefined' && groupIdx.length) buildGroups();
+  if (typeof lastDrive !== 'undefined' && lastDrive) showDrive(lastDrive);
+  if (typeof redrawCharts === 'function' && typeof dopa !== 'undefined') redrawCharts();
+}
+$('langbtn').onclick = () => { LANG = LANG === 'uk' ? 'en' : 'uk'; try { localStorage.setItem('fly.lang', LANG); } catch (e) {} applyLang(); log(t('lang_switched')); };
+
 // ================================================================== cards: drag / snap / resize / persist
-const LKEY = 'fly.layout.v2', GAP = 8, SNAP = 12;
+const LKEY = 'fly.layout.v3', GAP = 8, SNAP = 12;
 const cards = [...document.querySelectorAll('.card')];
 function defaultLayout() {
   const W = innerWidth, H = innerHeight, L = {};
-  const lw = Math.round(clamp(W * 0.24, 280, 420)), rw = Math.round(clamp(W * 0.25, 300, 460));
+  const lw = Math.round(clamp(W * 0.24, 280, 420)), rw = Math.round(clamp(W * 0.27, 320, 500));
   const bh = Math.round(H * 0.44);
   L.brain = { x: 16, y: 16, w: lw, h: bh };
   L.fly = { x: 16, y: 16 + bh + GAP, w: lw, h: H - 32 - bh - GAP };
   const cx = 16 + lw + GAP, cw = W - cx - rw - GAP - 16;
   L.browser = { x: cx, y: 16, w: cw, h: 0 };
-  const rx = W - rw - 16, want = [['state', 96], ['casino', 340], ['groups', 210], ['raster', 170], ['trace', 100], ['links', 230], ['log', 170]];
+  // the dopamine chart is the hero: it takes the space under the browser window when there is enough of it
+  const browserH = 27 + 38 + 38 + 24 + Math.round((cw - 2) * PX_H / PX_W), under = H - 16 - (16 + browserH + GAP);
+  const want = [['state', 84], ['casino', 300], ['groups', 180], ['raster', 120], ['trace', 90], ['links', 190], ['log', 150]];
+  if (under >= 150) L.dopa = { x: cx, y: 16 + browserH + GAP, w: cw, h: under }; else want.splice(1, 0, ['dopa', 250]);
+  const rx = W - rw - 16;
   const total = want.reduce((a, [, h]) => a + h, 0), f = Math.min(1, (H - 32 - GAP * (want.length - 1)) / total);   // fit the column into the window
   let y = 16;
   for (const [id, h] of want) { const hh = Math.max(64, Math.round(h * f)); L[id] = { x: rx, y, w: rw, h: hh }; y += hh + GAP; }
@@ -244,7 +374,7 @@ function onLayoutChanged(save = true) { if (window.layout) { layout(); fitOverla
 // ================================================================== 3-D overlay in *pixel* units
 // World units == CSS pixels on the z=0 plane, origin at the viewport centre, y up: the fly lands on real DOM boxes.
 const glCanvas = $('gl');
-const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setClearColor(0x000000, 0);
 const scene = new THREE.Scene();
@@ -259,19 +389,59 @@ function resize() {
   camera.aspect = W / H; camera.updateProjectionMatrix();
   camera.position.set(0, 0, (H / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   camera.lookAt(0, 0, 0);
+  if (brainMat) brainMat.uniforms.uCamZ.value = camera.position.z;
+  if (haloMat) haloMat.uniforms.uCamZ.value = camera.position.z;
   layout(); fitOverlay();
 }
 const toWorld = (sx, sy, z = 0) => new THREE.Vector3(sx - W / 2, H / 2 - sy, z);   // viewport px -> world
 
-// ================================================================== brain point cloud (framed in its card)
+// ================================================================== brain point cloud (GPU-shaded, framed in its card)
+// Every neuron is a soft sprite. Colour comes from the shader: resting = a cool tint of its region, stimulated =
+// amber, firing = white-hot; whole regions that work harder glow. Activity arrives ~10-20x per second as a spike
+// bitmask; the shader interpolates between the last two frames, so the cloud breathes smoothly at any display rate.
 const GROUP_COL = [[0.55, 0.58, 0.7], [0.30, 0.55, 1.0], [0.71, 0.48, 1.0], [0.30, 0.88, 0.54], [1.0, 0.70, 0.28], [1.0, 0.36, 0.36], [0.34, 0.94, 1.0], [1.0, 0.30, 0.82], [1.0, 0.85, 0.23]];
-const GROUP_NAME = ['прочие', 'зрительные доли', 'центральный мозг', 'VNC', 'нисходящие', 'моторные', 'сетчатка', 'дофамин PPL101 (−)', 'дофамин PAM (+)'];
 const GROUP_CSS = ['#8c93b3', '#4d8dff', '#b57bff', '#4de08a', '#ffb347', '#ff5c5c', '#57f0ff', '#ff4dd2', '#ffd93b'];
 const brainGroup = new THREE.Group(); scene.add(brainGroup);
-let N = 0, base = null, colors = null, actNow = null, actTarget = null, actBytes = null, actSlow = null, groupArr = null, points = null, hot = null, hotIdx = null, posArr = null, dopaFlash = 0, pamFlash = 0;
+let N = 0, base = null, actPrev = null, actCur = null, actBytes = null, actSlow = null, groupArr = null, points = null, halo = null, posArr = null, dopaFlash = 0, pamFlash = 0;
+let brainMat = null, haloMat = null, lastAct = 0, actGap = 0.1, haloPrev = null, haloCur = null, haloIdx = null, brainMid = 0;
 let readoutPos = [], nDescending = 512, groupIdx = [], groupMean = [];
-const HOT = 1500;   // the most persistently active neurons get their own bright, bigger layer
 const spin = { x: 0.15, y: 0, drag: null, idle: 0 };
+const VERT = `
+  attribute vec3 aBase; attribute float aGroup; attribute float aPrev; attribute float aCur;
+  uniform float uMix, uSize, uCamZ, uPixelRatio, uDopa, uPam, uHalo; uniform float uBoost[9];
+  varying vec3 vColor; varying float vAlpha;
+  void main() {
+    float a = mix(aPrev, aCur, uMix);
+    int g = int(aGroup + 0.5);
+    float boost = 0.0;
+    for (int i = 0; i < 9; i++) if (i == g) boost = uBoost[i];
+    vec3 rest = mix(vec3(0.22, 0.34, 0.62), aBase, 0.3) * 0.62;
+    vec3 warm = vec3(1.0, 0.66, 0.22);
+    vec3 hot = vec3(1.0, 0.97, 0.88);
+    vec3 c = mix(rest, warm, smoothstep(0.38, 0.85, a));
+    c = mix(c, hot, smoothstep(0.9, 1.0, a));
+    c += aBase * boost * 0.35;
+    if (g == 7 && uDopa > 0.0) c = mix(c, vec3(1.0, 0.25, 0.7), uDopa);
+    if (g == 8 && uPam > 0.0) c = mix(c, vec3(1.0, 0.9, 0.3), uPam);
+    vColor = c;
+    vAlpha = uHalo > 0.5 ? 0.012 + 0.05 * a : 0.16 + 0.6 * a;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    float s = uSize * (uHalo > 0.5 ? 3.2 + 2.0 * a : 0.8 + 1.8 * a) * uPixelRatio * (uCamZ / max(1.0, -mv.z));
+    gl_PointSize = s;
+    gl_Position = projectionMatrix * mv;
+  }`;
+const FRAG = `
+  varying vec3 vColor; varying float vAlpha;
+  void main() {
+    float d = length(gl_PointCoord - 0.5);
+    float a = smoothstep(0.5, 0.12, d) * vAlpha;
+    gl_FragColor = vec4(vColor * a, a);
+  }`;
+function makeMat(haloLayer) {
+  // neurons: normal (premultiplied) blending so dense regions do not wash out to white; halo: additive glow
+  return new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, depthTest: false, premultipliedAlpha: true, blending: haloLayer ? THREE.AdditiveBlending : THREE.NormalBlending,
+    uniforms: { uMix: { value: 1 }, uSize: { value: 1.8 }, uCamZ: { value: 1000 }, uPixelRatio: { value: Math.min(devicePixelRatio, 2) }, uDopa: { value: 0 }, uPam: { value: 0 }, uHalo: { value: haloLayer ? 1 : 0 }, uBoost: { value: new Array(9).fill(0) } } });
+}
 async function loadBrain() {
   const meta = await (await fetch('/meta.json')).json();
   const raw = new Float32Array(await (await fetch('/soma.bin?v=' + meta.n + '_' + meta.total)).arrayBuffer());
@@ -279,90 +449,110 @@ async function loadBrain() {
   readoutPos = meta.readout; nDescending = meta.n_descending;
   posArr = new Float32Array(N * 3);
   for (let i = 0; i < N; i++) { posArr[i * 3] = raw[i * 3]; posArr[i * 3 + 1] = -raw[i * 3 + 2]; posArr[i * 3 + 2] = raw[i * 3 + 1]; }
-  base = new Float32Array(N * 3); colors = new Float32Array(N * 3); actNow = new Float32Array(N); actTarget = new Float32Array(N); actBytes = new Uint8Array(N); actSlow = new Float32Array(N);
+  base = new Float32Array(N * 3); actPrev = new Uint8Array(N); actCur = new Uint8Array(N); actBytes = actCur; actSlow = new Float32Array(N);
   groupIdx = GROUP_COL.map(() => []); groupMean = GROUP_COL.map(() => 0);
-  for (let i = 0; i < N; i++) { const c = GROUP_COL[groupArr[i]] || GROUP_COL[0]; base.set(c, i * 3); groupIdx[groupArr[i]].push(i); }
+  const gArr = new Float32Array(N);
+  for (let i = 0; i < N; i++) { const c = GROUP_COL[groupArr[i]] || GROUP_COL[0]; base.set(c, i * 3); groupIdx[groupArr[i]].push(i); gArr[i] = groupArr[i]; }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  points = new THREE.Points(geo, new THREE.PointsMaterial({ size: 1.7, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false }));
-  brainGroup.add(points);
-  const hg = new THREE.BufferGeometry();
-  hg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(HOT * 3), 3));
-  hg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(HOT * 3), 3));
-  hg.setDrawRange(0, 0);
-  hot = new THREE.Points(hg, new THREE.PointsMaterial({ size: 4.5, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
-  hotIdx = new Int32Array(HOT);
-  brainGroup.add(hot);
-  $('hudline').textContent = `${meta.total.toLocaleString('ru')} нейронов · ${meta.synapses.toLocaleString('ru')} синапсов`;
-  const g = $('groups'); g.innerHTML = '';
-  for (let k = 1; k < GROUP_COL.length; k++) g.insertAdjacentHTML('beforeend', `<div class="grp"><span>${GROUP_NAME[k]}</span><div class="b"><i id="gb${k}" style="background:${GROUP_CSS[k]}"></i></div><span class="v" id="gv${k}">0%</span></div>`);
+  geo.setAttribute('aBase', new THREE.BufferAttribute(base, 3));
+  geo.setAttribute('aGroup', new THREE.BufferAttribute(gArr, 1));
+  geo.setAttribute('aPrev', new THREE.BufferAttribute(actPrev, 1, true));
+  geo.setAttribute('aCur', new THREE.BufferAttribute(actCur, 1, true));
+  brainMat = makeMat(false); haloMat = makeMat(true);
+  brainMat.uniforms.uCamZ.value = haloMat.uniforms.uCamZ.value = camera.position.z;
+  // the halo (soft glow) uses every 20th neuron: at 120k soft sprites additive blending would wash out to white
+  const hidx = []; for (let i = 0; i < N; i += 20) hidx.push(i);
+  const hgeo = new THREE.BufferGeometry(); const HN = hidx.length;
+  const hp = new Float32Array(HN * 3), hb = new Float32Array(HN * 3), hg = new Float32Array(HN);
+  hidx.forEach((i, m) => { hp.set(posArr.subarray(i * 3, i * 3 + 3), m * 3); hb.set(base.subarray(i * 3, i * 3 + 3), m * 3); hg[m] = groupArr[i]; });
+  haloPrev = new Uint8Array(HN); haloCur = new Uint8Array(HN); haloIdx = hidx;
+  hgeo.setAttribute('position', new THREE.BufferAttribute(hp, 3)); hgeo.setAttribute('aBase', new THREE.BufferAttribute(hb, 3)); hgeo.setAttribute('aGroup', new THREE.BufferAttribute(hg, 1));
+  hgeo.setAttribute('aPrev', new THREE.BufferAttribute(haloPrev, 1, true)); hgeo.setAttribute('aCur', new THREE.BufferAttribute(haloCur, 1, true));
+  halo = new THREE.Points(hgeo, haloMat); points = new THREE.Points(geo, brainMat);
+  geo.computeBoundingBox(); brainMid = (geo.boundingBox.min.y + geo.boundingBox.max.y) / 2;
+  brainGroup.add(halo); brainGroup.add(points);
+  $('hudline').textContent = `${meta.total.toLocaleString(LANG === 'uk' ? 'uk' : 'en')} ${t('neurons')} · ${meta.synapses.toLocaleString(LANG === 'uk' ? 'uk' : 'en')} ${t('synapses')}`;
+  buildGroups();
   setupRemote(meta);
   layout();
 }
-function updateColors() {
-  const df = dopaFlash, pf = pamFlash;
-  for (let i = 0; i < N; i++) {
-    const a = actNow[i] += (actTarget[i] - actNow[i]) * 0.35;
-    const gboost = groupMean[groupArr[i]] * 1.5;          // whole regions that work harder glow brighter
-    const k = 0.14 + 0.86 * a + gboost, j = i * 3;
-    let r = base[j] * k + a * 0.45, g = base[j + 1] * k + a * 0.45, b = base[j + 2] * k + a * 0.3;
-    if (df > 0 && groupArr[i] === 7) { r = 1; g = 0.2 * (1 - df); b = 0.6; }
-    if (pf > 0 && groupArr[i] === 8) { r = 1; g = 0.9; b = 0.3 * (1 - pf); }
-    colors[j] = r; colors[j + 1] = g; colors[j + 2] = b;
-  }
-  points.geometry.attributes.color.needsUpdate = true;
+function buildGroups() {
+  const g = $('groups'); g.innerHTML = '';
+  for (let k = 1; k < GROUP_COL.length; k++) g.insertAdjacentHTML('beforeend', `<div class="grp"><span>${t('groups')[k]}</span><div class="b"><i id="gb${k}" style="background:${GROUP_CSS[k]}"></i></div><span class="v" id="gv${k}">0%</span></div>`);
 }
-function updateHot() {   // top-HOT neurons by slow activity -> big bright points; footer lists the hottest regions
-  let n = 0;
-  const thr = 0.35, pos = hot.geometry.attributes.position.array, col = hot.geometry.attributes.color.array;
-  for (let i = 0; i < N && n < HOT; i++) if (actSlow[i] > thr) hotIdx[n++] = i;
-  for (let m = 0; m < n; m++) { const i = hotIdx[m], j = i * 3, s = Math.min(1, actSlow[i]);
-    pos[m * 3] = posArr[j]; pos[m * 3 + 1] = posArr[j + 1]; pos[m * 3 + 2] = posArr[j + 2];
-    col[m * 3] = base[j] * 0.4 + 0.6 * s; col[m * 3 + 1] = base[j + 1] * 0.4 + 0.6 * s; col[m * 3 + 2] = base[j + 2] * 0.4 + 0.45 * s; }
-  hot.geometry.setDrawRange(0, n); hot.geometry.attributes.position.needsUpdate = true; hot.geometry.attributes.color.needsUpdate = true;
-  const top = groupMean.map((v, k) => [v, k]).filter(x => x[1] > 0).sort((a, b) => b[0] - a[0]).slice(0, 3);
-  $('brainfoot').innerHTML = `сейчас сильнее всего: ` + top.map(([v, k]) => `<b style="color:${GROUP_CSS[k]}">${GROUP_NAME[k]}</b> ${(v * 100).toFixed(1)}%`).join(' · ') + ` · ярких нейронов: <b>${n}</b>`;
+function onActivity(bits) {   // new spike bitmask: shift cur -> prev, decay, mark spikes; the shader blends between them
+  actPrev.set(actCur);
+  let frac = 0;
+  for (let i = 0; i < N; i++) { const sp = bits[i >> 3] & (128 >> (i & 7)); if (sp) { actCur[i] = 255; frac++; } else actCur[i] = (actCur[i] * 0.45) | 0; actSlow[i] += ((sp ? 1 : 0) - actSlow[i]) * 0.08; }
+  points.geometry.attributes.aPrev.needsUpdate = true; points.geometry.attributes.aCur.needsUpdate = true;
+  haloPrev.set(haloCur); for (let m = 0; m < haloIdx.length; m++) haloCur[m] = actCur[haloIdx[m]];
+  halo.geometry.attributes.aPrev.needsUpdate = true; halo.geometry.attributes.aCur.needsUpdate = true;
+  const now = performance.now() / 1000; if (lastAct) actGap = actGap * 0.8 + Math.min(0.5, now - lastAct) * 0.2; lastAct = now;
+  brainMat.uniforms.uMix.value = haloMat.uniforms.uMix.value = 0;
+  return frac;
+}
+function updateGroups() {
+  for (let g = 1; g < GROUP_COL.length; g++) { const ids = groupIdx[g]; if (!ids || !ids.length) continue;
+    let s = 0; for (const i of ids) s += actSlow[i]; const m = s / ids.length; groupMean[g] = m;
+    const el = $('gb' + g); if (el) { el.style.width = Math.min(100, m * 300) + '%'; $('gv' + g).textContent = (m * 100).toFixed(1) + '%'; } }
+  const boost = brainMat.uniforms.uBoost.value; for (let g = 0; g < 9; g++) boost[g] = Math.min(1, groupMean[g] * 1.5); haloMat.uniforms.uBoost.value = boost;
+  let n = 0; for (let i = 0; i < N; i++) if (actSlow[i] > 0.35) n++;
+  const top = groupMean.map((v, k) => [v, k]).filter(x => x[1] > 0 && x[1] < 7).sort((a, b) => b[0] - a[0]).slice(0, 3);   // the two dopamine clusters are tiny: shown in their own bars, not ranked
+  $('brainfoot').innerHTML = `${t('strongest')}: ` + top.map(([v, k]) => `<b style="color:${GROUP_CSS[k]}">${t('groups')[k]}</b> ${(v * 100).toFixed(1)}%`).join(' · ') + ` · ${t('bright')}: <b>${n}</b>`;
 }
 const pad = $('dragpad');
 pad.addEventListener('pointerdown', e => { spin.drag = [e.clientX, e.clientY]; spin.idle = 0; pad.setPointerCapture(e.pointerId); });
 pad.addEventListener('pointerup', () => spin.drag = null);
 pad.addEventListener('pointermove', e => { if (!spin.drag) return; spin.y += (e.clientX - spin.drag[0]) * 0.008; spin.x = clamp(spin.x + (e.clientY - spin.drag[1]) * 0.008, -1.2, 1.2); spin.drag = [e.clientX, e.clientY]; spin.idle = 0; });
 
-// ================================================================== remote / tunnel / gear menu
-let isLocal = false;
+// ================================================================== remote / tunnel / gear menu / session
+let isLocal = false, lastMeta = null;
 function setupRemote(meta) {
-  isLocal = !!meta.local;
+  isLocal = !!meta.local; lastMeta = meta;
   if (!meta.local) return;
   const box = $('remote'), tbtn = $('tunbtn'), turl = $('tunurl');
   box.style.display = 'flex';
-  const show = (on, lan, tun) => { tbtn.textContent = meta.tunnel_managed ? 'serve' : tun ? 'вкл' : 'выкл'; tbtn.className = tun ? 'on' : ''; turl.textContent = tun || ''; tbtn.disabled = !!meta.tunnel_managed; tbtn.title = meta.tunnel_managed ? 'туннелем управляет fly.serve' : ''; };
+  const show = (on, lan, tun) => { tbtn.textContent = meta.tunnel_managed ? 'serve' : tun ? t('on') : t('off'); tbtn.className = tun ? 'on' : ''; turl.textContent = tun || ''; tbtn.disabled = !!meta.tunnel_managed; tbtn.title = meta.tunnel_managed ? t('tunnel_serve') : ''; };
   window.showRemote = show;
   show(meta.public, meta.lan_url, meta.tunnel_url);
-  tbtn.onclick = async () => { const on = tbtn.className !== 'on'; tbtn.textContent = on ? '…' : 'выкл'; const r = await (await fetch('/admin/tunnel?on=' + (on ? 1 : 0))).json(); show(r.public, r.lan_url, r.tunnel_url); log(r.error ? `туннель: ${r.error}` : r.tunnel_url ? `туннель открыт: ${r.tunnel_url}` : 'туннель закрыт', r.error ? 'bad' : ''); };
+  tbtn.onclick = async () => { const on = tbtn.className !== 'on'; tbtn.textContent = on ? '…' : t('off'); const r = await (await fetch('/admin/tunnel?on=' + (on ? 1 : 0))).json(); show(r.public, r.lan_url, r.tunnel_url); log(r.error ? t('tunnel_err', r.error) : r.tunnel_url ? t('tunnel_open', r.tunnel_url) : t('tunnel_closed'), r.error ? 'bad' : ''); };
   if (meta.state) applyState(meta.state);
+  let asked = false; try { asked = localStorage.getItem('fly.session.asked') === '1'; } catch (e) {}
+  if (!meta.session && !asked) openSession();
 }
+function openSession() { $('session').style.display = 'block'; $('s-err').textContent = ''; $('s-val').value = ''; $('s-val').focus(); }
+$('s-skip').onclick = () => { $('session').style.display = 'none'; try { localStorage.setItem('fly.session.asked', '1'); } catch (e) {} };
+$('s-save').onclick = async () => {
+  const v = $('s-val').value.trim();
+  if (!/^[A-Za-z0-9,_-]{16,128}$/.test(v)) { $('s-err').textContent = t('s_bad'); return; }
+  const r = await (await fetch('/admin/session?value=' + encodeURIComponent(v))).json();
+  if (!r.ok) { $('s-err').textContent = r.error || t('s_bad'); return; }
+  $('session').style.display = 'none'; log(t('s_saved'), 'ok'); try { localStorage.setItem('fly.session.asked', '1'); } catch (e) {}
+};
 const flyCtl = { anim: 'fly', paused: false, mode: 'browse', broke: false };
 try { flyCtl.anim = localStorage.getItem('fly.anim') || 'fly'; } catch (e) {}
 function applyState(s) {
   flyCtl.paused = !!s.paused; flyCtl.mode = s.mode || 'browse'; flyCtl.broke = !!s.broke;
-  $('g-pause').textContent = flyCtl.paused ? 'Вернуть' : 'Прогнать'; $('g-pause').className = flyCtl.paused ? 'on' : '';
-  $('g-mode').textContent = flyCtl.mode === 'casino' ? 'Гулять по сайту' : 'Крутить слоты'; $('g-mode').className = flyCtl.mode === 'casino' ? 'on' : '';
-  $('g-anim').textContent = flyCtl.anim === 'walk' ? 'Возобновить полёт' : 'Остановить полёт'; $('g-anim').className = flyCtl.anim === 'walk' ? 'on' : '';
+  $('g-pause').textContent = flyCtl.paused ? t('g_back') : t('g_shoo'); $('g-pause').className = flyCtl.paused ? 'on' : '';
+  $('g-mode').textContent = flyCtl.mode === 'casino' ? t('g_browse') : t('g_casino'); $('g-mode').className = flyCtl.mode === 'casino' ? 'on' : '';
+  $('g-anim').textContent = flyCtl.anim === 'walk' ? t('g_resume_flight') : t('g_stop_flight'); $('g-anim').className = flyCtl.anim === 'walk' ? 'on' : '';
   $('g-refill').style.display = flyCtl.broke ? 'block' : 'none';
   if (flyState.mode === 'hover' || flyState.mode === 'walk' || flyState.mode === 'smoke') flyState.mode = flyCtl.broke ? 'smoke' : flyCtl.anim === 'walk' ? 'walk' : 'hover';
-  if (flyCtl.broke) setFlyLabel('проигралась — курит и ждёт, пока дадут денег'); else if (flyCtl.paused) setFlyLabel('прогнана — сидит и ждёт'); else if (flyCtl.mode === 'casino') setFlyLabel('крутит слоты');
+  if (flyCtl.broke) setFlyLabel(t('fly_smoke')); else if (flyCtl.paused) setFlyLabel(t('fly_shooed')); else if (flyCtl.mode === 'casino') setFlyLabel(t('fly_slots')); else setFlyLabel(t('fly_look'));
 }
 const flyScreen = new THREE.Vector3();
 function flyOnScreen() { flyScreen.copy(flyRoot.position).project(camera); return [(flyScreen.x + 1) / 2 * W, (1 - flyScreen.y) / 2 * H]; }
 addEventListener('mousemove', e => { if (!isLocal || !fly.ready) return; const [fx, fy] = flyOnScreen(), r = Math.min(120, flyRoot.scale.x * fly.len * 0.5); glCanvas.classList.toggle('hit', Math.hypot(e.clientX - fx, e.clientY - fy) < r); });
-glCanvas.addEventListener('click', e => { const g = $('gear'); if (g.style.display === 'flex') { g.style.display = 'none'; return; } g.style.display = 'flex'; g.style.left = Math.min(W - 220, e.clientX + 12) + 'px'; g.style.top = Math.min(H - 190, e.clientY - 20) + 'px'; });
+glCanvas.addEventListener('click', e => { const g = $('gear'); if (g.style.display === 'flex') { g.style.display = 'none'; return; } g.style.display = 'flex'; g.style.left = Math.min(W - 250, e.clientX + 12) + 'px'; g.style.top = Math.min(H - 260, e.clientY - 20) + 'px'; });
 addEventListener('pointerdown', e => { if (!e.target.closest('#gear') && e.target !== glCanvas) $('gear').style.display = 'none'; });
-async function cmd(do_) { $('gear').style.display = 'none'; const r = await (await fetch('/admin/cmd?do=' + do_)).json(); log(`команда мухе: ${do_}`, 'act'); return r; }
-$('g-anim').onclick = () => { flyCtl.anim = flyCtl.anim === 'walk' ? 'fly' : 'walk'; try { localStorage.setItem('fly.anim', flyCtl.anim); } catch (e) {} applyState(flyCtl); log(flyCtl.anim === 'walk' ? 'муха ходит пешком' : 'муха снова летает'); };
+async function cmd(do_) { $('gear').style.display = 'none'; const r = await (await fetch('/admin/cmd?do=' + do_)).json(); log(t('log_cmd', do_), 'act'); return r; }
+$('g-anim').onclick = () => { flyCtl.anim = flyCtl.anim === 'walk' ? 'fly' : 'walk'; try { localStorage.setItem('fly.anim', flyCtl.anim); } catch (e) {} applyState(flyCtl); log(flyCtl.anim === 'walk' ? t('log_walk') : t('log_fly')); };
 $('g-pause').onclick = () => cmd(flyCtl.paused ? 'resume' : 'pause');
 $('g-mode').onclick = () => cmd(flyCtl.mode === 'casino' ? 'browse' : 'casino');
 $('g-refill').onclick = () => cmd('refill');
+$('g-session').onclick = () => { $('gear').style.display = 'none'; openSession(); };
+$('g-reset').onclick = () => { $('gear').style.display = 'none'; if (confirm(t('reset_confirm'))) cmd('reset'); };
 
 // ================================================================== the fly (NeuroMechFly v2, EPFL flygym, Apache-2.0)
 const flyRoot = new THREE.Group(); scene.add(flyRoot);
@@ -442,8 +632,10 @@ function takeOff() { if (flyState.mode === 'landed') flyTo(flyState.home.clone()
 // layout: brain pinned to its card, fly home to its card (viewport coordinates)
 function layout() {
   const b = $('card-brain').getBoundingClientRect(), f = $('card-fly').getBoundingClientRect();
-  const S = Math.min((b.height - 40) * 0.36, b.width * 0.42);
-  brainGroup.position.copy(toWorld(b.left + b.width / 2, b.top + 26 + (b.height - 26) * 0.5)); brainGroup.scale.setScalar(Math.max(20, S));
+  // the cloud spans ~0.95 x 1.3 units (brain + VNC below it): fit that into the card and centre it
+  const S = Math.min((b.height - 44) * 0.68, b.width * 0.85);
+  brainGroup.position.copy(toWorld(b.left + b.width / 2, b.top + 30 + (b.height - 34) * 0.5)); brainGroup.position.y -= brainMid * S; brainGroup.scale.setScalar(Math.max(20, S));
+  if (brainMat) { const px = clamp(S / 120, 1.2, 2.8); brainMat.uniforms.uSize.value = px; haloMat.uniforms.uSize.value = px; }
   flyState.home.copy(toWorld(f.left + f.width / 2, f.top + f.height * 0.5));
   flyState.floor = flyState.home.y - f.height * 0.18;
   if (fly.ready) { fly.baseScale = Math.min(f.width * 0.42, 190) / fly.len; flyRoot.scale.setScalar(fly.baseScale); }
@@ -452,9 +644,21 @@ function layout() {
 addEventListener('resize', () => { if (!manualLayout) applyLayout(defaultLayout()); resize(); });
 addEventListener('scroll', () => { layout(); fitOverlay(); }, { passive: true });
 
-// ================================================================== browser card + overlay
+// ================================================================== browser card: live MJPEG + overlay
 const overlay = $('overlay'), octx = overlay.getContext('2d');
 let links = [], chosen = -1, ripple = null, k = 1;
+const live = $('live'), shot = $('shot');
+let liveOk = false;
+live.onload = () => { liveOk = true; live.style.display = 'block'; };          // first frame of the stream decoded
+live.onerror = () => { liveOk = false; live.style.display = 'none'; setTimeout(() => { live.src = '/stream.mjpg?' + Date.now(); }, 3000); };
+live.src = '/stream.mjpg';
+setInterval(() => { $('fps').textContent = liveOk ? 'live' + (liveFps >= 1 ? ' · ' + liveFps.toFixed(0) + ' fps' : '') : ''; }, 1000);
+let liveFps = 0;
+// MJPEG exposes no frame event: estimate the rate from an 8x8 canvas diff sampled every animation frame
+const probeC = document.createElement('canvas'); probeC.width = probeC.height = 8; const probeX = probeC.getContext('2d', { willReadFrequently: true });
+let probePrev = null, probeCnt = 0, probeT = performance.now();
+(function probeLive() { requestAnimationFrame(probeLive); if (!liveOk) return; try { probeX.drawImage(live, 0, 0, 8, 8); const d = probeX.getImageData(0, 0, 8, 8).data; let diff = 0; if (probePrev) for (let i = 0; i < d.length; i += 4) diff += Math.abs(d[i] - probePrev[i]); if (!probePrev || diff > 0) probeCnt++; probePrev = d; } catch (e) {}
+  const nowT = performance.now(); if (nowT - probeT > 1000) { liveFps = probeCnt * 1000 / (nowT - probeT); probeCnt = 0; probeT = nowT; } })();
 function fitOverlay() {
   const r = overlay.getBoundingClientRect(); if (!r.width) return;
   const dpr = Math.min(devicePixelRatio, 2);
@@ -465,19 +669,19 @@ function boxCenter(box) { const [x, y, w, h] = box; if (w <= 0 || h <= 0) return
 function drawOverlay() {
   octx.clearRect(0, 0, overlay.width, overlay.height);
   links.forEach((l, i) => { const [x, y, w, h] = l.box; if (w <= 0 || h <= 0) return;
-    octx.strokeStyle = i === chosen ? '#ffb347' : 'rgba(87,214,255,0.6)'; octx.lineWidth = i === chosen ? 3 : 1.2; octx.strokeRect((x - 2) * k, (y - 2) * k, (w + 4) * k, (h + 4) * k);
+    octx.strokeStyle = i === chosen ? '#ffb347' : 'rgba(87,214,255,0.45)'; octx.lineWidth = i === chosen ? 3 : 1; octx.strokeRect((x - 2) * k, (y - 2) * k, (w + 4) * k, (h + 4) * k);
     if (i === chosen) { octx.fillStyle = 'rgba(255,179,71,0.18)'; octx.fillRect(x * k, y * k, w * k, h * k); } });
-  if (ripple) { const t = (performance.now() - ripple.t0) / 900;
-    if (t < 1) for (let j = 0; j < 2; j++) { const tt = Math.max(0, t - j * 0.25); octx.beginPath(); octx.arc(ripple.x * k, ripple.y * k, (10 + tt * 120) * k, 0, Math.PI * 2); octx.strokeStyle = `rgba(255,179,71,${(1 - tt) * 0.9})`; octx.lineWidth = (5 * (1 - tt) + 1) * k; octx.stroke(); }
+  if (ripple) { const tt0 = (performance.now() - ripple.t0) / 900;
+    if (tt0 < 1) for (let j = 0; j < 2; j++) { const tt = Math.max(0, tt0 - j * 0.25); octx.beginPath(); octx.arc(ripple.x * k, ripple.y * k, (10 + tt * 120) * k, 0, Math.PI * 2); octx.strokeStyle = `rgba(255,179,71,${(1 - tt) * 0.9})`; octx.lineWidth = (5 * (1 - tt) + 1) * k; octx.stroke(); }
     else ripple = null; }
 }
 function linkScreen(box) { const r = overlay.getBoundingClientRect(), [cx, cy] = boxCenter(box); return [r.left + cx * k, r.top + cy * k]; }   // viewport px
-function showTip(i) { const tip = $('tip'); if (i < 0 || !links[i]) { tip.style.display = 'none'; return; } const [cx, cy] = boxCenter(links[i].box); tip.textContent = (links[i].text || links[i].url.replace(/^https?:\/\/[^/]+/, '')) + '  ← клик'; tip.style.left = cx * k + 'px'; tip.style.top = cy * k + 'px'; tip.style.display = 'block'; }
+function showTip(i) { const tip = $('tip'); if (i < 0 || !links[i]) { tip.style.display = 'none'; return; } const [cx, cy] = boxCenter(links[i].box); tip.textContent = (links[i].text || links[i].url.replace(/^https?:\/\/[^/]+/, '')) + '  ' + t('click'); tip.style.left = cx * k + 'px'; tip.style.top = cy * k + 'px'; tip.style.display = 'block'; }
 
 // ================================================================== stats cards
 const rateHist = [], rewardMarks = [], dopa = [];
 function log(msg, cls = '') { const d = document.createElement('div'); d.className = cls; d.textContent = msg; const l = $('log'); l.prepend(d); while (l.children.length > 80) l.lastChild.remove(); }
-function sizeCanvas(c) { const w = c.clientWidth, h = c.clientHeight; if (!w || !h) return false; if (c.width !== w || c.height !== h) { c.width = w; c.height = h; return true; } return false; }
+function sizeCanvas(c) { const dpr = Math.min(devicePixelRatio, 2), w = Math.round(c.clientWidth * dpr), h = Math.round(c.clientHeight * dpr); if (!w || !h) return false; if (c.width !== w || c.height !== h) { c.width = w; c.height = h; return true; } return false; }
 function drawTrace() {
   const c = $('trace'); sizeCanvas(c); const ctx = c.getContext('2d'), Wc = c.width, Hc = c.height;
   ctx.clearRect(0, 0, Wc, Hc); const n = rateHist.length; if (!n) return;
@@ -490,18 +694,13 @@ function drawTrace() {
 function drawRaster(a) {
   const c = $('raster'); const reset = sizeCanvas(c); const ctx = c.getContext('2d'), Wc = c.width, Hc = c.height, col = 2;
   if (!Wc) return;
-  if (reset) { ctx.fillStyle = '#0a0d18'; ctx.fillRect(0, 0, Wc, Hc); }
-  ctx.drawImage(c, col, 0, Wc - col, Hc, 0, 0, Wc - col, Hc); ctx.fillStyle = '#0a0d18'; ctx.fillRect(Wc - col, 0, col, Hc);
+  if (reset) { ctx.fillStyle = '#090c15'; ctx.fillRect(0, 0, Wc, Hc); }
+  ctx.drawImage(c, col, 0, Wc - col, Hc, 0, 0, Wc - col, Hc); ctx.fillStyle = '#090c15'; ctx.fillRect(Wc - col, 0, col, Hc);
   const n = readoutPos.length, per = n / Hc;
   for (let r = 0; r < Hc; r++) { let v = 0; const lo = Math.floor(r * per), hi = Math.floor((r + 1) * per);
     for (let i = lo; i < hi; i++) { const p = readoutPos[i]; if (p >= 0 && a[p] > v) v = a[p]; }
     if (v < 40) continue; ctx.fillStyle = (r * per < nDescending ? `rgba(255,179,71,${v / 255})` : `rgba(255,92,92,${v / 255})`); ctx.fillRect(Wc - col, r, col, 1); }
   ctx.fillStyle = 'rgba(28,35,56,.9)'; ctx.fillRect(0, Math.round(nDescending / per), Wc, 1);
-}
-function updateGroups() {
-  for (let g = 1; g < GROUP_COL.length; g++) { const ids = groupIdx[g]; if (!ids || !ids.length) continue;
-    let s = 0; for (const i of ids) s += actTarget[i]; s /= ids.length; groupMean[g] = s;
-    $('gb' + g).style.width = Math.min(100, s * 300) + '%'; $('gv' + g).textContent = (s * 100).toFixed(1) + '%'; }
 }
 function renderLinks(probs) {
   const box = $('links'); box.innerHTML = '';
@@ -511,39 +710,68 @@ function renderLinks(probs) {
 }
 function flash(color) { const f = $('flash'); f.style.background = `radial-gradient(ellipse at 15% 50%, ${color}, transparent 60%)`; f.style.opacity = 1; setTimeout(() => f.style.opacity = 0, 250); }
 const setFlyLabel = s => $('flylabel').innerHTML = `<b>Drosophila</b> · ${s}`;
-const fmt = v => v == null ? '—' : Number(v).toLocaleString('ru', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const EV_NAME = { goal: '🎯 цель +15%', lucky: '🍀 удачный слот', bust: '💸 слив', switch: '↪ смена слота', broke: '🚬 деньги кончились', refill: '💰 дали денег' };
+const fmt = v => v == null ? '—' : Number(v).toLocaleString(LANG === 'uk' ? 'uk' : 'en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const reasonText = r => r ? (t('reasons')[r] || r) : '';
+let lastDrive = null;
 function showCasino(c, logEvents = false) {
   if (!c) return;
   $('c-bal').textContent = fmt(c.balance); $('c-bet').textContent = fmt(c.bet); $('c-win').textContent = fmt(c.win); $('c-demo').textContent = fmt(c.demo);
   $('c-win').style.color = c.delta > 0 ? 'var(--ok)' : c.delta < 0 ? 'var(--bad)' : '';
-  if (c.drive) showDrive(c.drive);
-  if (logEvents) (c.events || []).forEach(e => log(`${EV_NAME[e.type] || e.type}: ${e.name || ''} ${e.pct != null ? (e.pct >= 0 ? '+' : '') + e.pct + '%' : ''}`, e.type === 'bust' || e.type === 'broke' ? 'bad' : e.type === 'switch' ? '' : 'ok'));
+  if (c.drive) showDrive(c.drive, c.kind);
+  if (logEvents) (c.events || []).forEach(e => log(`${t('ev')[e.type] || e.type}: ${e.name || ''} ${e.pct != null ? (e.pct >= 0 ? '+' : '') + e.pct + '%' : ''}`, e.type === 'bust' || e.type === 'broke' ? 'bad' : e.type === 'switch' ? '' : 'ok'));
 }
-function showDrive(d) {
+function showDrive(d, kind) {
+  lastDrive = d;
   $('desire-bar').style.width = Math.round(d.desire * 100) + '%'; $('desire-v').textContent = Math.round(d.desire * 100) + '%';
   if (d.bank_min != null) {     // extremes of the fly's bank since the money was handed over (a refill starts over)
     $('c-min').textContent = fmt(d.bank_min); $('c-max').textContent = fmt(d.bank_max);
-    $('c-min-l').textContent = 'мин. банк' + (d.bank_min_at ? ' · ' + d.bank_min_at.slice(6) : ''); $('c-max-l').textContent = 'макс. банк' + (d.bank_max_at ? ' · ' + d.bank_max_at.slice(6) : '');
-    $('c-min').parentNode.title = d.bank_min_at ? 'минимум ' + d.bank_min_at : ''; $('c-max').parentNode.title = d.bank_max_at ? 'максимум ' + d.bank_max_at : '';
+    $('c-min-l').textContent = t('bank_min') + (d.bank_min_at ? ' · ' + d.bank_min_at.slice(6) : ''); $('c-max-l').textContent = t('bank_max') + (d.bank_max_at ? ' · ' + d.bank_max_at.slice(6) : '');
+    $('c-min').parentNode.title = d.bank_min_at || ''; $('c-max').parentNode.title = d.bank_max_at || '';
     $('c-spins').textContent = d.spins_total ?? '—'; $('c-since').textContent = d.since || '—';
   }
   const pct = d.start ? ((d.session_net / d.start) * 100).toFixed(2) : null;
-  $('slotline').textContent = d.broke ? `банк пуст — ${d.name || 'слот'}: ${d.session_spins} спинов, ${fmt(d.session_net)} FUN · ждёт денег` : d.name ? `${d.name}${d.lucky ? ' 🍀' : d.unlucky ? ' ✗' : ''} · ${d.session_spins} спинов · ${d.session_net >= 0 ? '+' : ''}${fmt(d.session_net)} FUN${pct != null ? ' (' + (pct >= 0 ? '+' : '') + pct + '%)' : ''} · серия ${d.loss_streak ? d.loss_streak + ' проигр.' : d.win_streak + ' выигр.'}${d.target_bet ? ' · хочет ставку ' + fmt(d.target_bet) : ''}${d.reason ? ' · ' + d.reason : ''}` : 'выбирает слот…';
+  $('slotline').textContent = d.broke ? t('broke_line', d.name || 'slot', d.session_spins, fmt(d.session_net))
+    : d.name ? `${d.name}${d.lucky ? ' 🍀' : d.unlucky ? ' ✗' : ''}${kind === 'generic' ? ' · ' + t('exploring') : ''} · ${t('sl_spins', d.session_spins)} · ${d.session_net >= 0 ? '+' : ''}${fmt(d.session_net)} FUN${pct != null ? ' (' + (pct >= 0 ? '+' : '') + pct + '%)' : ''} · ${d.loss_streak ? t('sl_streak_loss', d.loss_streak) : t('sl_streak_win', d.win_streak)}${d.target_bet ? ' · ' + t('sl_wants', fmt(d.target_bet)) : ''}${d.reason ? ' · ' + reasonText(d.reason) : ''}` : t('choosing');
   const ev = $('events'); ev.innerHTML = '';
-  (d.events || []).forEach(e => { const x = document.createElement('div'); x.className = e.type; x.textContent = `${e.time}  ${EV_NAME[e.type] || e.type}  ${e.name || ''}${e.pct != null ? '  ' + (e.pct >= 0 ? '+' : '') + e.pct + '%' : ''}${e.balance != null ? '  ' + fmt(e.balance) : ''}${e.why ? '  ' + e.why : ''}`; ev.appendChild(x); });
-  const sl = $('slots'); sl.innerHTML = '<span class="n">слот</span><span>спины</span><span>итог</span><span>лучш.</span>';
+  (d.events || []).forEach(e => { const x = document.createElement('div'); x.className = e.type; x.textContent = `${e.time}  ${t('ev')[e.type] || e.type}  ${e.name || ''}${e.pct != null ? '  ' + (e.pct >= 0 ? '+' : '') + e.pct + '%' : ''}${e.balance != null ? '  ' + fmt(e.balance) : ''}${e.why ? '  ' + reasonText(e.why) : ''}`; ev.appendChild(x); });
+  const sl = $('slots'); sl.innerHTML = `<span class="n">${t('th_slot')}</span><span>${t('th_spins')}</span><span>${t('th_net')}</span><span>${t('th_best')}</span>`;
   (d.slots || []).forEach(s => { const cls = s.lucky ? 'lucky' : s.unlucky ? 'unlucky' : ''; sl.insertAdjacentHTML('beforeend', `<span class="n ${cls}">${s.lucky ? '🍀 ' : s.unlucky ? '✗ ' : ''}${s.name}</span><span>${s.spins}</span><span class="${cls}">${s.net >= 0 ? '+' : ''}${s.net}</span><span>${s.best_pct >= 0 ? '+' : ''}${s.best_pct}%</span>`); });
 }
+// ---- dopamine / appetite / bank chart: history from the server (survives reloads) + live rows
+async function loadHistory() {
+  try { const h = await (await fetch('/history.json')).json(); dopa.length = 0; (h.spins || []).forEach(r => dopa.push(r)); drawDopa(); } catch (e) {}
+}
 function drawDopa() {
-  const c = $('dopa'); sizeCanvas(c); const ctx = c.getContext('2d'), Wc = c.width, Hc = c.height, n = dopa.length;
-  ctx.clearRect(0, 0, Wc, Hc); ctx.fillStyle = '#7b85a6'; ctx.font = '10px Consolas';
-  if (!n) { ctx.fillText('кривая дофамина: столбики — реакция на спин, линия — накопленная', 6, 12); return; }
-  const bw = Math.max(2, Math.min(10, (Wc - 8) / n)), mid = Hc * 0.55, rmax = Math.max(1, ...dopa.map(d => Math.abs(d.r)));
-  dopa.forEach((d, i) => { const h = d.r / rmax * (Hc * 0.4); ctx.fillStyle = d.r >= 0 ? 'rgba(255,217,59,.85)' : 'rgba(255,77,210,.85)'; ctx.fillRect(4 + i * bw, h >= 0 ? mid - h : mid, bw - 1, Math.abs(h) || 1); });
-  const cmin = Math.min(0, ...dopa.map(d => d.cum)), cmax = Math.max(0, ...dopa.map(d => d.cum)), span = Math.max(1e-6, cmax - cmin);
-  ctx.beginPath(); dopa.forEach((d, i) => { const x = 4 + i * bw + bw / 2, y = Hc - 4 - (d.cum - cmin) / span * (Hc - 8); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.strokeStyle = '#57d6ff'; ctx.lineWidth = 1.5; ctx.stroke();
-  ctx.fillStyle = '#7b85a6'; ctx.fillText(`Σ ${dopa[n - 1].cum.toFixed(2)}`, Wc - 60, 11); ctx.fillText(`${n} спинов`, 6, 11);
+  const c = $('dopa'); sizeCanvas(c); const ctx = c.getContext('2d'), Wc = c.width, Hc = c.height, dpr = Math.min(devicePixelRatio, 2);
+  ctx.clearRect(0, 0, Wc, Hc); ctx.font = `${10 * dpr}px Consolas`; ctx.fillStyle = '#7b85a6';
+  const nAll = dopa.length;
+  if (!nAll) { ctx.fillText(t('dopa_empty'), 6 * dpr, 12 * dpr); $('dopastats').innerHTML = ''; return; }
+  const padL = 4 * dpr, padR = 66 * dpr, padT = 6 * dpr, padB = 14 * dpr, plotW = Wc - padL - padR, plotH = Hc - padT - padB;
+  const bw = Math.max(2 * dpr, Math.min(9 * dpr, plotW / nAll)), n = Math.min(nAll, Math.floor(plotW / bw)), rows = dopa.slice(nAll - n);
+  const mid = padT + plotH * 0.5, rmax = Math.max(1, ...rows.map(d => Math.abs(d.r)));
+  // bars: dopamine per spin (PAM up, PPL101 down)
+  rows.forEach((d, i) => { const h = d.r / rmax * (plotH * 0.42); ctx.fillStyle = d.r >= 0 ? 'rgba(255,217,59,.8)' : 'rgba(255,77,210,.75)'; ctx.fillRect(padL + i * bw, h >= 0 ? mid - h : mid, Math.max(1, bw - 1), Math.abs(h) || 1); });
+  ctx.fillStyle = 'rgba(124,134,168,.35)'; ctx.fillRect(padL, mid, plotW, 1);
+  const X = i => padL + i * bw + bw / 2;
+  // appetite 0..1 (amber)
+  ctx.beginPath(); let started = false;
+  rows.forEach((d, i) => { if (d.desire == null) return; const y = padT + (1 - d.desire) * plotH; started ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); started = true; });
+  ctx.strokeStyle = '#ffb347'; ctx.lineWidth = 1.6 * dpr; ctx.stroke();
+  // bank (green), scaled to its own range within the window
+  const banks = rows.map(d => d.bank).filter(v => v != null);
+  if (banks.length > 1) { const bmin = Math.min(...banks), bmax = Math.max(...banks), span = Math.max(1e-6, bmax - bmin);
+    ctx.beginPath(); started = false; rows.forEach((d, i) => { if (d.bank == null) return; const y = padT + (1 - (d.bank - bmin) / span) * plotH; started ? ctx.lineTo(X(i), y) : ctx.moveTo(X(i), y); started = true; });
+    ctx.strokeStyle = '#5ee29a'; ctx.lineWidth = 1.6 * dpr; ctx.stroke();
+    ctx.fillStyle = '#5ee29a'; ctx.textAlign = 'right'; ctx.fillText(fmt(bmax), Wc - 2, padT + 9 * dpr); ctx.fillText(fmt(bmin), Wc - 2, padT + plotH); ctx.textAlign = 'left'; }
+  // win markers under the axis
+  rows.forEach((d, i) => { if (d.win > 0) { ctx.fillStyle = d.win >= (d.bet || 0) ? '#5ee29a' : 'rgba(94,226,154,.45)'; ctx.fillRect(X(i) - dpr, Hc - padB + 3 * dpr, 2 * dpr, 4 * dpr); } });
+  ctx.fillStyle = '#7b85a6'; ctx.fillText(`${n}/${nAll} ${t('ds_spins')}`, padL + 2, Hc - 3 * dpr);
+  // stats: hit rate, dopamine sum, net, mean appetite, correlation appetite <-> bank
+  const wins = rows.filter(d => d.win > 0).length, sumR = rows.reduce((a, d) => a + d.r, 0), net = rows.reduce((a, d) => a + ((d.win || 0) - (d.bet || 0)), 0);
+  const des = rows.map(d => d.desire).filter(v => v != null), meanDes = des.length ? des.reduce((a, b) => a + b, 0) / des.length : null;
+  let corr = null; const pairs = rows.filter(d => d.desire != null && d.bank != null);
+  if (pairs.length > 5) { const mx = pairs.reduce((a, d) => a + d.desire, 0) / pairs.length, my = pairs.reduce((a, d) => a + d.bank, 0) / pairs.length; let sxy = 0, sxx = 0, syy = 0; pairs.forEach(d => { sxy += (d.desire - mx) * (d.bank - my); sxx += (d.desire - mx) ** 2; syy += (d.bank - my) ** 2; }); corr = sxx && syy ? sxy / Math.sqrt(sxx * syy) : null; }
+  $('dopastats').innerHTML = `<span>${t('ds_spins')} <b>${n}</b></span><span>${t('ds_hit')} <b>${(wins / n * 100).toFixed(0)}%</b></span><span>${t('ds_dopa')} <b>${sumR.toFixed(1)}</b></span><span>${t('ds_net')} <b>${net >= 0 ? '+' : ''}${fmt(net)}</b></span>${meanDes != null ? `<span>${t('ds_desire')} <b>${(meanDes * 100).toFixed(0)}%</b></span>` : ''}${corr != null ? `<span>${t('ds_corr')} <b>${corr.toFixed(2)}</b></span>` : ''}`;
 }
 function redrawCharts() { drawTrace(); drawDopa(); if (actBytes) drawRaster(actBytes); }
 
@@ -554,45 +782,44 @@ es.onmessage = ev => {
   const m = JSON.parse(ev.data);
   $('wait').style.display = 'none';
   if (m.t === 'act') {
-    if (!actTarget) return;
-    const bits = Uint8Array.from(atob(m.s), c => c.charCodeAt(0)); let frac = 0;
-    for (let i = 0; i < N; i++) { const sp = bits[i >> 3] & (128 >> (i & 7)); if (sp) { actTarget[i] = 1; frac++; } else actTarget[i] *= 0.55; actBytes[i] = actTarget[i] * 255; actSlow[i] += ((sp ? 1 : 0) - actSlow[i]) * 0.08; }
+    if (!actCur) return;
+    const bits = Uint8Array.from(atob(m.s), c => c.charCodeAt(0));
+    const frac = onActivity(bits);
     rateHist.push(frac / Math.max(1, N)); if (rateHist.length > 400) { rateHist.shift(); rewardMarks.forEach(r => r.i--); }
     while (rewardMarks.length && rewardMarks[0].i < 0) rewardMarks.shift();
     $('s-rate').textContent = (frac / Math.max(1, N) * 100).toFixed(1) + '%';
-    drawTrace(); drawRaster(actBytes); updateGroups(); updateHot();
-  } else if (m.t === 'frame') {
-    $('shot').src = 'data:image/jpeg;base64,' + m.jpg;
+    drawTrace(); drawRaster(actCur); updateGroups();
   } else if (m.t === 'page') {
     links = m.links; chosen = -1; showTip(-1);
-    $('shot').src = m.jpg ? 'data:image/jpeg;base64,' + m.jpg : 'data:image/png;base64,' + m.png;
+    if (!liveOk) shot.src = m.jpg ? 'data:image/jpeg;base64,' + m.jpg : 'data:image/png;base64,' + m.png;
     const short = m.url.replace(/^https?:\/\//, ''); $('url').textContent = short; $('tabtitle').textContent = m.title || short;
     try { const u = new URL(m.url); $('fav').src = u.origin + '/favicon.ico'; } catch (e) {}
-    const sess = $('sess'); sess.textContent = m.session ? 'сессия: вошла' : 'гость'; sess.className = 'sess' + (m.session ? ' on' : '');
+    const sess = $('sess'); sess.textContent = m.session ? t('logged_in') : t('guest'); sess.className = 'sess' + (m.session ? ' on' : '');
     $('s-ep').textContent = m.episode; $('s-step').textContent = m.step;
-    $('inline').textContent = `эпизод ${m.episode} · шаг ${m.step} · ${m.links.length} ${m.casino ? 'действий' : 'ссылок'}`;
-    $('status').textContent = m.casino ? `банк ${fmt(m.casino.balance)} FUN · ставка ${fmt(m.casino.bet)} · выигрыш ${fmt(m.casino.win)}` : 'смотрит на страницу — сетчатка → зрительные доли → нисходящие нейроны';
+    $('inline').textContent = t('inline', m.episode, m.step, m.links.length, m.casino ? t('actions') : t('links'));
+    $('status').textContent = m.casino ? t('st_bank', fmt(m.casino.balance), fmt(m.casino.bet), fmt(m.casino.win)) : t('st_look');
     showCasino(m.casino); renderLinks(null); drawOverlay(); takeOff();
-    setFlyLabel(flyCtl.broke ? 'проигралась — курит и ждёт' : flyCtl.paused ? 'прогнана — сидит и ждёт' : m.casino && m.casino.phase === 'lobby' ? 'ищет слот' : m.casino ? 'крутит слоты' : 'смотрит');
-    log(m.casino ? `${m.casino.phase === 'lobby' ? 'лобби' : 'слот'}: банк ${fmt(m.casino.balance)} FUN, ${m.links.length} действий` : `страница: ${m.url.replace(/^https?:\/\/[^/]+/, '') || '/'}  (${m.links.length} ссылок)`);
+    setFlyLabel(flyCtl.broke ? t('fly_smoke') : flyCtl.paused ? t('fly_shooed') : m.casino && m.casino.phase === 'lobby' ? t('fly_lobby') : m.casino && m.casino.kind === 'generic' ? t('fly_explore') : m.casino ? t('fly_slots') : t('fly_look'));
+    log(m.casino ? t(m.casino.phase === 'lobby' ? 'log_lobby' : 'log_slot', fmt(m.casino.balance), m.links.length) : t('log_page', m.url.replace(/^https?:\/\/[^/]+/, '') || '/', m.links.length));
   } else if (m.t === 'decision') {
     chosen = m.a; renderLinks(m.p); drawOverlay(); showTip(chosen);
-    if (links[chosen]) { const [sx, sy] = linkScreen(links[chosen].box); flyTo(toWorld(sx, sy, 6), 'landed', links[chosen].box); setFlyLabel('летит к цели');
-      $('status').textContent = `клик: ${links[chosen].text || links[chosen].url}`; log(`решение: #${chosen} ${links[chosen].text || links[chosen].url}  p=${(m.p[chosen] * 100).toFixed(1)}%${links[chosen].box[2] <= 0 ? ' (скрытая ссылка в меню)' : ''}`, 'act'); }
+    if (links[chosen]) { const [sx, sy] = linkScreen(links[chosen].box); flyTo(toWorld(sx, sy, 6), 'landed', links[chosen].box); setFlyLabel(t('fly_fly'));
+      $('status').textContent = t('st_click', links[chosen].text || links[chosen].url); log(t('log_decision', chosen, links[chosen].text || links[chosen].url, (m.p[chosen] * 100).toFixed(1)) + (links[chosen].box[2] <= 0 ? t('hidden_link') : ''), 'act'); }
   } else if (m.t === 'reward') {
     total = m.total; $('s-ret').textContent = (total >= 0 ? '+' : '') + total.toFixed(1);
     rewardMarks.push({ i: rateHist.length - 1, r: m.r });
-    if (m.casino) { dopa.push({ r: m.r, cum: total }); if (dopa.length > 300) dopa.shift(); drawDopa(); showCasino(m.casino, true); const d = m.casino.delta || 0;
-      if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(`спин: ${d.toFixed(2)} FUN → PPL101 (аверсивный дофамин ${m.r.toFixed(2)})`, 'bad'); }
-      else if (m.r > 0) { pamFlash = 1; flash('rgba(255,217,59,0.3)'); log(`спин: +${d.toFixed(2)} FUN → PAM (дофамин +${m.r.toFixed(2)})`, 'ok'); }
-    } else if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(`награда ${m.r.toFixed(1)} → PPL101`, 'bad'); }
-    else { pamFlash = 1; flash('rgba(94,226,154,0.25)'); log(`награда +${m.r.toFixed(1)} → PAM`, 'ok'); }
+    if (m.casino) { if (m.casino.row) { dopa.push(m.casino.row); if (dopa.length > 5000) dopa.shift(); } drawDopa(); showCasino(m.casino, true); const d = m.casino.delta || 0;
+      if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(t('log_spin_loss', d.toFixed(2), m.r.toFixed(2)), 'bad'); }
+      else if (m.r > 0) { pamFlash = 1; flash('rgba(255,217,59,0.3)'); log(t('log_spin_win', d.toFixed(2), m.r.toFixed(2)), 'ok'); }
+    } else if (m.r < 0) { dopaFlash = 1; flash('rgba(255,60,120,0.35)'); log(t('log_reward_neg', m.r.toFixed(1)), 'bad'); }
+    else { pamFlash = 1; flash('rgba(94,226,154,0.25)'); log(t('log_reward_pos', m.r.toFixed(1)), 'ok'); }
   } else if (m.t === 'public') { if (window.showRemote) showRemote(m.on, m.lan_url, m.tunnel_url); }
+  else if (m.t === 'reset') { dopa.length = 0; total = 0; $('s-ret').textContent = '0'; drawDopa(); log(t('reset_done'), 'act'); }
   else if (m.t === 'reload') location.reload();
   else if (m.t === 'state') applyState(m);
 };
 let lost = false;
-es.onerror = () => { lost = true; $('wait').style.display = 'block'; $('wait').textContent = 'муха перезапускается… переподключение'; };
+es.onerror = () => { lost = true; $('wait').style.display = 'block'; $('wait').textContent = t('reconnect'); };
 es.onopen = () => { if (lost) location.reload(); };
 
 // ================================================================== animation loop
@@ -610,9 +837,9 @@ let lastDpr = devicePixelRatio;
 function animate(now) {
   requestAnimationFrame(animate);
   if (innerWidth !== W || innerHeight !== H || devicePixelRatio !== lastDpr) {   // missed resize / zoom / DPI change
-    lastDpr = devicePixelRatio; renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); if (!manualLayout) applyLayout(defaultLayout()); resize();
+    lastDpr = devicePixelRatio; renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); if (brainMat) brainMat.uniforms.uPixelRatio.value = haloMat.uniforms.uPixelRatio.value = Math.min(devicePixelRatio, 2); if (!manualLayout) applyLayout(defaultLayout()); resize();
   }
-  const t = now / 1000, dt = Math.min(0.05, (now - lastNow) / 1000 || 0.016), fs = flyState; lastNow = now;
+  const t0 = now / 1000, dt = Math.min(0.05, (now - lastNow) / 1000 || 0.016), fs = flyState; lastNow = now;
   let grounded = false, landing = 0, walking = false, smoking = false;
   if (fs.mode === 'fly') {
     if (fs.targetBox) { const [sx, sy] = linkScreen(fs.targetBox); fs.target.set(sx - W / 2, H / 2 - sy, 6); }   // follow the box if the card moved
@@ -623,59 +850,65 @@ function animate(now) {
       if (dist < 6 && fs.vel.length() < 40) { fs.mode = fs.after; fs.vel.set(0, 0, 0); fs.pos.copy(fs.target); }
     } else {
       const goal = fs.waypoint || fs.target; steer(fs, goal, dt, fs.waypoint ? 10 : 16, fs.waypoint ? 4.5 : 7.5, 1500);
-      fs.vel.x += noise(t, 3.1, 7.7) * 90 * dt; fs.vel.y += noise(t + 5, 2.3, 6.1) * 90 * dt;
+      fs.vel.x += noise(t0, 3.1, 7.7) * 90 * dt; fs.vel.y += noise(t0 + 5, 2.3, 6.1) * 90 * dt;
       if (fs.waypoint && fs.pos.distanceTo(fs.waypoint) < 70) fs.waypoint = null;
       orientFlying(fs, dt);
       if (!fs.waypoint && fs.pos.distanceTo(fs.target) < 5 && fs.vel.length() < 60) { fs.mode = fs.after; fs.vel.set(0, 0, 0); fs.pos.copy(fs.target); fs.landedAt = now; }
     }
-    if (fs.mode === 'landed') { const b = links[chosen] && links[chosen].box; if (b) { const [rx, ry] = boxCenter(b); ripple = { t0: now, x: rx, y: ry }; } setFlyLabel('села на цель'); }
+    if (fs.mode === 'landed') { const b = links[chosen] && links[chosen].box; if (b) { const [rx, ry] = boxCenter(b); ripple = { t0: now, x: rx, y: ry }; } setFlyLabel(t('fly_landed')); }
   } else if (fs.mode === 'hover') {
     if (flyCtl.broke) fs.mode = 'smoke'; else if (flyCtl.anim === 'walk') fs.mode = 'walk';
-    tmp2.set(fs.home.x + noise(t * 0.5, 1.0, 2.6) * 40, fs.home.y + noise(t * 0.5 + 9, 1.7, 3.9) * 22, 22 + noise(t * 0.4 + 3, 1.3, 2.9) * 18);
-    steer(fs, tmp2, dt, 6, 3.2, 400); fs.vel.x += noise(t, 4.3, 9.1) * 40 * dt; fs.vel.y += noise(t + 2, 5.1, 8.3) * 60 * dt; orientFlying(fs, dt);
+    tmp2.set(fs.home.x + noise(t0 * 0.5, 1.0, 2.6) * 40, fs.home.y + noise(t0 * 0.5 + 9, 1.7, 3.9) * 22, 22 + noise(t0 * 0.4 + 3, 1.3, 2.9) * 18);
+    steer(fs, tmp2, dt, 6, 3.2, 400); fs.vel.x += noise(t0, 4.3, 9.1) * 40 * dt; fs.vel.y += noise(t0 + 2, 5.1, 8.3) * 60 * dt; orientFlying(fs, dt);
   } else if (fs.mode === 'walk') {
     if (flyCtl.broke) fs.mode = 'smoke'; else if (flyCtl.anim !== 'walk') fs.mode = 'hover';
     walking = grounded = true;
-    if (!fs.walkGoal || fs.pos.distanceTo(fs.walkGoal) < 8 || t > (fs.walkUntil || 0)) { fs.walkGoal = new THREE.Vector3(fs.home.x + (Math.random() - 0.5) * 160, fs.floor + (Math.random() - 0.5) * 40, 4); fs.walkUntil = t + 2 + Math.random() * 3; }
-    const resting = t % 7 < 2.5; steer(fs, resting ? fs.pos : fs.walkGoal, dt, 7, 6, 120); fs.pos.z = 4; tmp.copy(fs.walkGoal).sub(fs.pos);
+    if (!fs.walkGoal || fs.pos.distanceTo(fs.walkGoal) < 8 || t0 > (fs.walkUntil || 0)) { fs.walkGoal = new THREE.Vector3(fs.home.x + (Math.random() - 0.5) * 160, fs.floor + (Math.random() - 0.5) * 40, 4); fs.walkUntil = t0 + 2 + Math.random() * 3; }
+    const resting = t0 % 7 < 2.5; steer(fs, resting ? fs.pos : fs.walkGoal, dt, 7, 6, 120); fs.pos.z = 4; tmp.copy(fs.walkGoal).sub(fs.pos);
     qTarget.copy(landedQ); if (tmp.length() > 6 && !resting) { qB.setFromAxisAngle(AX_Z, Math.atan2(tmp.y, tmp.x) - Math.PI / 2); qTarget.copy(qB).multiply(landedQ); }
     flyRoot.position.copy(fs.pos); flyRoot.quaternion.slerp(qTarget, Math.min(1, dt * 6)); fs.phase += fs.vel.length() * dt * 0.09;
   } else if (fs.mode === 'smoke') {   // broke: sits on the floor of its card, side-on, smoking; the gear menu can hand it money
     if (!flyCtl.broke) fs.mode = flyCtl.anim === 'walk' ? 'walk' : 'hover';
     grounded = smoking = true;
     tmp2.set(fs.home.x, fs.floor, 6); steer(fs, tmp2, dt, 8, 7, 200);
-    flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t * 1.3) * 1.5;
+    flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t0 * 1.3) * 1.5;
     tmp.set(fs.pos.x + 1, fs.pos.y + 0.05, fs.pos.z + 0.55); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp); flyRoot.rotateX(-0.15); qA.copy(flyRoot.quaternion); flyRoot.quaternion.copy(qTarget).slerp(qA, Math.min(1, dt * 5));
   } else if (fs.mode === 'landed') {
     grounded = true; landing = clamp(1 - (now - fs.landedAt) / 350, 0, 1);
     if (fs.targetBox) { const [sx, sy] = linkScreen(fs.targetBox); fs.pos.set(sx - W / 2, H / 2 - sy, 6); }   // stays glued to the element even if its card moves
-    flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t * 9) * 0.4; flyRoot.quaternion.slerp(landedQ, Math.min(1, dt * 10));
+    flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t0 * 9) * 0.4; flyRoot.quaternion.slerp(landedQ, Math.min(1, dt * 10));
   }
   const squash = 1 - 0.18 * Math.sin(Math.PI * landing);
   if (fly.model) fly.model.scale.set(1 + 0.08 * (1 - squash), squash, 1 + 0.06 * (1 - squash));
-  if (fly.body) fly.body.scale.set(1, 1 + 0.02 * Math.sin(t * 5.2), 1);
+  if (fly.body) fly.body.scale.set(1, 1 + 0.02 * Math.sin(t0 * 5.2), 1);
   if (fly.legs) { const tuck = (fly.tuck = (fly.tuck || 0) + ((grounded ? 0 : 1) - (fly.tuck || 0)) * Math.min(1, dt * 8)); qA.setFromAxisAngle(AX_X, 0.55 * tuck); qB.setFromAxisAngle(AX_Y, walking ? Math.sin(fs.phase * 2.2) * 0.07 : 0); fly.legs.quaternion.copy(qA).multiply(qB); }
   fly.spread = (fly.spread || 0) + ((grounded ? 0 : 1.25) - (fly.spread || 0)) * Math.min(1, dt * 7);
-  const beat = t * 88 + Math.sin(t * 3) * 0.6, amp = grounded ? 0 : (0.5 + 0.08 * Math.sin(t * 2.7)) * Math.min(1, fly.spread);
+  const beat = t0 * 88 + Math.sin(t0 * 3) * 0.6, amp = grounded ? 0 : (0.5 + 0.08 * Math.sin(t0 * 2.7)) * Math.min(1, fly.spread);
   fly.wings.forEach(w => { const set = (pivot, ph) => { const f = Math.sin(beat + ph) * amp, feather = Math.cos(beat + ph) * 0.3 * amp; qA.setFromAxisAngle(AX_Z, w.s * f); qB.setFromAxisAngle(AX_Y, -w.s * fly.spread); qC.setFromAxisAngle(AX_X, feather); pivot.quaternion.copy(qA).multiply(qB).multiply(qC); };
     set(w.pivot, 0); w.ghosts.forEach(g => { g.mesh.visible = amp > 0.05; set(g.pivot, g.ph); }); });
   // cigarette + smoke
   if (fly.cig) {
     fly.cig.group.visible = smoking; smokePts.visible = smoking;
     if (smoking) {
-      const puff = 0.5 + 0.5 * Math.sin(t * 1.1); fly.cig.ember.material.color.setRGB(1, 0.25 + 0.35 * puff, 0); fly.cig.glow.intensity = 0.3 + puff * 0.9;
+      const puff = 0.5 + 0.5 * Math.sin(t0 * 1.1); fly.cig.ember.material.color.setRGB(1, 0.25 + 0.35 * puff, 0); fly.cig.glow.intensity = 0.3 + puff * 0.9;
       fly.cig.ember.getWorldPosition(fly.cig.tip);
       if (now - smoke.last > 90) { smoke.last = now; const i = smoke.next++ % SMOKE; smoke.pos[i * 3] = fly.cig.tip.x; smoke.pos[i * 3 + 1] = fly.cig.tip.y; smoke.pos[i * 3 + 2] = fly.cig.tip.z; smoke.age[i] = 0; smoke.vel[i].set(10 + Math.random() * 12, 28 + Math.random() * 18, 0); }
-      for (let i = 0; i < SMOKE; i++) { if (smoke.age[i] > 3) continue; smoke.age[i] += dt; smoke.pos[i * 3] += (smoke.vel[i].x + Math.sin(t * 2 + i) * 14) * dt; smoke.pos[i * 3 + 1] += smoke.vel[i].y * dt; if (smoke.age[i] > 3) smoke.pos[i * 3 + 1] = -99999; }
+      for (let i = 0; i < SMOKE; i++) { if (smoke.age[i] > 3) continue; smoke.age[i] += dt; smoke.pos[i * 3] += (smoke.vel[i].x + Math.sin(t0 * 2 + i) * 14) * dt; smoke.pos[i * 3 + 1] += smoke.vel[i].y * dt; if (smoke.age[i] > 3) smoke.pos[i * 3 + 1] = -99999; }
       smokeGeo.attributes.position.needsUpdate = true;
     }
   }
   if (ripple) drawOverlay();
-  if (points) { updateColors(); if (dopaFlash > 0) dopaFlash = Math.max(0, dopaFlash - 0.02); if (pamFlash > 0) pamFlash = Math.max(0, pamFlash - 0.02); if (!spin.drag && ++spin.idle > 60) spin.y += 0.0025; brainGroup.rotation.set(spin.x, spin.y, 0); }
+  if (points) {
+    const u = brainMat.uniforms; u.uMix.value = haloMat.uniforms.uMix.value = lastAct ? clamp((t0 - lastAct) / Math.max(0.03, actGap), 0, 1) : 1;
+    if (dopaFlash > 0) dopaFlash = Math.max(0, dopaFlash - 0.02); if (pamFlash > 0) pamFlash = Math.max(0, pamFlash - 0.02);
+    u.uDopa.value = haloMat.uniforms.uDopa.value = dopaFlash; u.uPam.value = haloMat.uniforms.uPam.value = pamFlash;
+    if (!spin.drag && ++spin.idle > 60) spin.y += 0.0025; brainGroup.rotation.set(spin.x, spin.y, 0);
+  }
   renderer.render(scene, camera);
 }
+applyLang();
 applyLayout(layoutState || defaultLayout());
-resize(); loadBrain(); requestAnimationFrame(animate);
+resize(); loadBrain(); loadHistory(); requestAnimationFrame(animate);
 </script>
 </body>
 </html>
