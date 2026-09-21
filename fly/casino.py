@@ -554,11 +554,18 @@ class CasinoEnv:
             why = self.drive.reason
             self.drive.close_slot(why)
             print(f"casino: leaving '{self.cur_name}' ({why}), looking for another slot")
-        if self.lobby and self._open_lobby():        # phase 1: pick a slot from the Amusnet list
-            return self._observe()
-        self._open_game(self.game)
-        self._register_slot(self.game)
-        return self._observe()
+        for attempt in range(3):                     # phase 1: pick a slot from the lobby; the site can hiccup
+            if self.lobby and self._open_lobby():
+                return self._observe()
+            try:
+                self._open_game(self.game)
+                self._register_slot(self.game)
+                return self._observe()
+            except Exception as e:                   # aborted navigation, no FUN yet ... : wait, try again
+                print(f"casino: could not open a game ({str(e)[:80]}), retrying in 8 s")
+                self.page.wait_for_timeout(8000)
+                self._tick_brain()
+        raise RuntimeError("the casino site is not answering")
 
     def _register_slot(self, url: str, name: str | None = None):
         m = re.search(r"game=([^&]+)", url)
@@ -747,13 +754,18 @@ class CasinoEnv:
                 print(f"casino: {card['name']} did not open ({str(e)[:80]}), back to the lobby")
                 self.drive.note_open_failure(card["slug"], card["name"])
                 if not self._open_lobby():
-                    self._open_game(self.game)
-                    self._register_slot(self.game)
+                    self.page.wait_for_timeout(5000)
+                    return self.reset(), 0.0, False   # reset() retries lobby / default game with pauses
             return self._observe(), 0.0, False
         if self.kind == "generic":
             return self._step_generic(action)
         frame = self.game_frame()
-        self._demo_check(frame)
+        try:
+            self._demo_check(frame)
+        except RuntimeError as e:                    # FUN not shown (client reloading?): leave the game, no crash
+            print(f"casino: leaving '{self.cur_name}': {e}")
+            self.drive.reason = "unplayable"
+            return self._observe(), 0.0, True
         if self.bonus_i is not None and action == self.bonus_i:
             return self._step_bonus()
         before = self._read()
@@ -874,6 +886,12 @@ class CasinoEnv:
                 break                                # nothing happened on the wire: next try
         snap = self.sniffer.snapshot()
         self.balance = snap["balance"]
+        # a win is only real if this very action cost something: jackpot tickers and promo counters on the
+        # wire ("win": 8001481) must never be credited; and no slot pays more than 2000x the stake
+        if stake is None:
+            win = None
+        elif win is not None:
+            win = min(win, stake * 2000.0)
         if stake is None and win is None:
             self.explored += 1
             self._note_explored(1)

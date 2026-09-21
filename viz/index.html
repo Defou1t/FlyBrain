@@ -509,7 +509,7 @@ async function loadBrain() {
   haloPrev = new Uint8Array(HN); haloCur = new Uint8Array(HN); haloIdx = hidx;
   hgeo.setAttribute('position', new THREE.BufferAttribute(hp, 3)); hgeo.setAttribute('aBase', new THREE.BufferAttribute(hb, 3)); hgeo.setAttribute('aGroup', new THREE.BufferAttribute(hg, 1));
   hgeo.setAttribute('aPrev', new THREE.BufferAttribute(haloPrev, 1, true)); hgeo.setAttribute('aCur', new THREE.BufferAttribute(haloCur, 1, true));
-  halo = new THREE.Points(hgeo, haloMat); points = new THREE.Points(geo, brainMat); if (lite) { renderer.shadowMap.enabled = false; halo.visible = false; brainMat.uniforms.uPixelRatio.value = haloMat.uniforms.uPixelRatio.value = 1; }
+  halo = new THREE.Points(hgeo, haloMat); points = new THREE.Points(geo, brainMat); if (lite) { halo.visible = false; brainMat.uniforms.uPixelRatio.value = haloMat.uniforms.uPixelRatio.value = 1; }
   geo.computeBoundingBox(); brainMid = (geo.boundingBox.min.y + geo.boundingBox.max.y) / 2;
   { let lo = 1e9, hi = -1e9; for (let i = 0; i < N; i++) { const y = posArr[i * 3 + 1]; if (y < NECK) continue; if (y < lo) lo = y; if (y > hi) hi = y; } brainTop = (lo + hi) / 2; }   // centre of the brain proper (above the neck)
   brainGroup.add(halo); brainGroup.add(points);
@@ -694,6 +694,7 @@ function applySkin(name) {
   for (const m of [MAT.thorax, MAT.body]) { m.roughness = k.rough ?? 0.55; m.clearcoat = k.coat ?? 0.3; m.envMapIntensity = k.coat ? 0.55 : 0.4; }
   for (const m of [MAT.thorax, MAT.body, MAT.legs]) if (m.userData.shader) { m.userData.shader.uniforms.uFuzz.value.set(k.fuzz); if (m !== MAT.legs) m.userData.shader.uniforms.uDark.value = k.stripes; }
 }
+function loadFly() { if (fly.ready) return;
 new THREE.GLTFLoader().load(modelName === 'nmf' ? '/assets/drosophila.glb' : '/assets/drosophila-flybody.glb', gltf => {
   const model = gltf.scene; let legsMesh = null, bodyMesh = null;
   model.traverse(o => { if (!o.isMesh) return; const n = o.name.toLowerCase(); if (!n.includes('wing')) o.geometry = smoothGeometry(o.geometry);
@@ -746,7 +747,9 @@ new THREE.GLTFLoader().load(modelName === 'nmf' ? '/assets/drosophila.glb' : '/a
   model.traverse(o => { if (o.isMesh && !o.material.transparent) { o.castShadow = true; o.receiveShadow = true; } });
   fly.len = Math.max(size.x, size.y, size.z); fly.model = model; flyRoot.add(model); fly.ready = true;
   if (view === 'arcade') flyRoot.scale.setScalar(0.5 / fly.len); else layout();
-}, undefined, err => { console.warn('drosophila.glb failed', err); const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), MAT.body); m.scale.set(1, 0.8, 1.6); flyRoot.add(m); fly.len = 3.2; fly.ready = true; layout(); });
+}, undefined, err => { console.warn('fly model failed to load, retrying', err); setTimeout(loadFly, 2500); });   // e.g. the fly restarting mid-load: retry, never a placeholder
+}
+loadFly();
 
 // smoke: a small pool of soft sprites rising from the ember
 const smokeTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d'); const g = x.createRadialGradient(32, 32, 2, 32, 32, 30); g.addColorStop(0, 'rgba(230,235,245,0.9)'); g.addColorStop(0.5, 'rgba(210,218,235,0.35)'); g.addColorStop(1, 'rgba(200,210,230,0)'); x.fillStyle = g; x.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
@@ -859,8 +862,25 @@ function marqueeTexture() {   // "FLYBRAIN" and the BETKING logo (crown + wordma
   // buttons on the slope
   const slopeAng = Math.atan2(deckBack - ledgeH, deckDepth - 0.4);
   const onSlope = (mesh, u, along) => { const z0 = 0.02 + deckDepth / 2 - 0.4, y0 = pedTop + ledgeH; mesh.position.set(u, y0 + Math.sin(slopeAng) * along + 0.012 * Math.cos(slopeAng), z0 - Math.cos(slopeAng) * along - 0.012 * Math.sin(slopeAng)); mesh.rotation.x = slopeAng; cabinet.add(mesh); };
-  const spinBtn = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.08, 0.035, 32), new THREE.MeshPhysicalMaterial({ color: BK.red, emissive: BK.red, emissiveIntensity: 0.35, roughness: 0.3, clearcoat: 1 })); onSlope(spinBtn, 0.3, 0.24); cabinet.userData.spin = spinBtn;
-  [BK.yellow, BK.green, 0xffad33].forEach((col, i) => { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.035, 0.025, 24), new THREE.MeshPhysicalMaterial({ color: col, emissive: col, emissiveIntensity: 0.3, roughness: 0.3, clearcoat: 1 })); onSlope(b, -0.34 + i * 0.1, 0.27); });
+  // the fly works a web page, so the deck carries what a kiosk would: a mini keyboard and a mouse
+  // (a group placed on the slope; "lift" = height above the slope surface, the group's y axis is the slope normal)
+  const onSlopeGroup = (u, along) => { const g = new THREE.Group(); onSlope(g, u, along); g.position.y -= 0.012 * Math.cos(slopeAng); g.position.z += 0.012 * Math.sin(slopeAng); return g; };
+  const kb = onSlopeGroup(-0.1, 0.19); cabinet.userData.keyboard = kb;
+  const kbBase = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.014, 0.15), new THREE.MeshStandardMaterial({ color: 0x23232a, roughness: 0.6, metalness: 0.3 })); kbBase.position.y = 0.007; kb.add(kbBase);
+  const keyGeo = new THREE.BoxGeometry(0.022, 0.008, 0.022), keyMat = new THREE.MeshStandardMaterial({ color: 0x3a3a44, roughness: 0.55, metalness: 0.1 });
+  const rows = [14, 14, 13, 12], keys = new THREE.InstancedMesh(keyGeo, keyMat, rows.reduce((a, b) => a + b, 0)); const km = new THREE.Matrix4(); let ki = 0;
+  rows.forEach((n, r) => { const w = n * 0.0265; for (let i = 0; i < n; i++) { km.makeTranslation(-w / 2 + 0.0265 * i + 0.013 + (r === 2 ? 0.006 : r === 3 ? 0.014 : 0), 0.018, -0.052 + r * 0.0265); keys.setMatrixAt(ki++, km); } });
+  keys.instanceMatrix.needsUpdate = true; kb.add(keys);
+  const space = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.008, 0.022), new THREE.MeshStandardMaterial({ color: 0x3a3a44, roughness: 0.55, metalness: 0.1, emissive: BK.yellow, emissiveIntensity: 0 })); space.position.set(0.0, 0.018, 0.054); kb.add(space); cabinet.userData.space = space;
+  [[-0.135, 0.054, 0.05], [0.135, 0.054, 0.05]].forEach(([x, z, w]) => { const k = new THREE.Mesh(new THREE.BoxGeometry(w, 0.008, 0.022), keyMat); k.position.set(x, 0.018, z); kb.add(k); });
+  const pad = onSlopeGroup(0.3, 0.19);
+  const padMesh = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.004, 0.18), new THREE.MeshStandardMaterial({ color: 0x15151a, roughness: 0.95 })); padMesh.position.y = 0.002; pad.add(padMesh);
+  const mouse = new THREE.Group(); mouse.position.set(0.0, 0.004, 0.01); pad.add(mouse); cabinet.userData.mouse = mouse;
+  const mBody = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 18), new THREE.MeshPhysicalMaterial({ color: 0x2b2b33, roughness: 0.35, metalness: 0.2, clearcoat: 0.6, clearcoatRoughness: 0.3 })); mBody.scale.set(0.034, 0.02, 0.055); mBody.position.y = 0.014; mouse.add(mBody);
+  const mSeam = new THREE.Mesh(new THREE.BoxGeometry(0.002, 0.012, 0.03), new THREE.MeshBasicMaterial({ color: 0x0a0a0d })); mSeam.position.set(0, 0.026, -0.03); mouse.add(mSeam);
+  const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.006, 16), new THREE.MeshStandardMaterial({ color: 0x55555f, roughness: 0.5 })); wheel.rotation.z = Math.PI / 2; wheel.position.set(0, 0.031, -0.028); mouse.add(wheel);
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.002, 0.006), new THREE.MeshBasicMaterial({ color: BK.red })); led.position.set(0, 0.013, -0.04); mouse.add(led); cabinet.userData.mouseLed = led;
+  const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.0025, 0.0025, 0.12, 8), new THREE.MeshStandardMaterial({ color: 0x111114, roughness: 0.8 })); cable.rotation.x = Math.PI / 2; cable.position.set(0, 0.006, -0.11); mouse.add(cable);
   // head: body box behind, bevelled frame in front, the screen recessed inside the frame's hole
   const headY = pedTop + deckBack + 0.42, tilt = -0.1;
   const headZ = -0.02 - deckDepth / 2;
@@ -880,7 +900,7 @@ function marqueeTexture() {   // "FLYBRAIN" and the BETKING logo (crown + wordma
   const glow = new THREE.PointLight(0xffd7dc, 1.1, 3.5, 2); glow.position.set(0, headY - 0.1, 0.55); cabinet.add(glow); cabinet.userData.glow = glow;
   const spot = new THREE.SpotLight(0xdfe6ff, 1.1, 9, 0.5, 0.6, 1.5); spot.position.set(0.4, 4.2, 1.6); spot.target.position.set(0, 1.2, 0.1); arcade.add(spot); arcade.add(spot.target);
   // shadows: the fly and the cabinet cast, the deck and the floor receive; one 1024^2 map, off in lite mode
-  spot.castShadow = true; spot.shadow.mapSize.set(1024, 1024); spot.shadow.bias = -0.0005; spot.shadow.radius = 3; spot.shadow.camera.near = 1; spot.shadow.camera.far = 9; arcade.userData.shadowLight = spot;
+  spot.castShadow = true; spot.shadow.mapSize.set(1024, 1024); spot.shadow.bias = -0.0005; spot.shadow.radius = 3; spot.shadow.camera.near = 1; spot.shadow.camera.far = 9; arcade.userData.shadowLight = spot; try { if (localStorage.getItem('fly.lite') === '1') spot.castShadow = false; } catch (e) {}
   cabinet.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x0a0a0d, roughness: 0.85, metalness: 0.15 })); floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; arcade.add(floor);
   const grid = new THREE.GridHelper(40, 80, 0x3a1a22, 0x1a1418); grid.position.y = 0.002; arcade.add(grid);
@@ -932,7 +952,7 @@ function updateHud(c) {
 
 // ================================================================== browser card: live MJPEG + overlay
 const overlay = $('overlay'), octx = overlay.getContext('2d');
-let links = [], chosen = -1, ripple = null, k = 1, lastDecisionAt = -1e9, ghostGrid = false;
+let links = [], chosen = -1, ripple = null, k = 1, lastDecisionAt = -1e9, lastDecisionKey = false, ghostGrid = false;
 const live = $('live'), shot = $('shot');
 let liveOk = false;
 live.onload = () => { liveOk = true; live.style.display = 'block'; };          // first frame of the stream decoded
@@ -946,7 +966,7 @@ function applyLite(on, say) {
   if (brainMat) brainMat.uniforms.uPixelRatio.value = haloMat.uniforms.uPixelRatio.value = on ? 1 : Math.min(devicePixelRatio, 2);
   if (halo) halo.visible = !on;
   furMeshes.forEach(m => m.visible = !on);
-  renderer.shadowMap.enabled = !on; if (arcade.userData.shadowLight) arcade.userData.shadowLight.castShadow = !on; renderer.shadowMap.needsUpdate = true;
+  if (arcade.userData.shadowLight) arcade.userData.shadowLight.castShadow = !on;   // (never toggle renderer.shadowMap.enabled at run time: stale programs)
   $('litebtn').classList.toggle('on', on);
   const want = on ? '/stream.mjpg?fps=30' : '/stream.mjpg'; if (!live.src.endsWith(want)) { liveOk = false; live.src = want; }
   resize();
@@ -1107,7 +1127,7 @@ es.onmessage = ev => {
     setFlyLabel(flyCtl.broke ? t('fly_smoke') : flyCtl.paused ? t('fly_shooed') : m.casino && m.casino.phase === 'lobby' ? t('fly_lobby') : m.casino && m.casino.kind === 'generic' ? t('fly_explore') : m.casino ? t('fly_slots') : t('fly_look'));
     log(m.casino ? t(m.casino.phase === 'lobby' ? 'log_lobby' : 'log_slot', fmt(m.casino.balance), m.links.length) : t('log_page', m.url.replace(/^https?:\/\/[^/]+/, '') || '/', m.links.length));
   } else if (m.t === 'decision') {
-    chosen = m.a; lastDecisionAt = performance.now(); renderLinks(m.p); drawOverlay(); showTip(chosen);
+    chosen = m.a; lastDecisionAt = performance.now(); lastDecisionKey = !!(links[chosen] && /^game:space/.test(links[chosen].url)); renderLinks(m.p); drawOverlay(); showTip(chosen);
     if (links[chosen]) { const [sx, sy] = linkScreen(links[chosen].box); flyTo(toWorld(sx, sy, 6), 'landed', links[chosen].box); setFlyLabel(t('fly_fly'));
       $('status').textContent = t('st_click', links[chosen].text || links[chosen].url); log(t('log_decision', chosen, links[chosen].text || links[chosen].url, (m.p[chosen] * 100).toFixed(1)) + (links[chosen].box[2] <= 0 ? t('hidden_link') : ''), 'act'); }
   } else if (m.t === 'reward') {
@@ -1219,7 +1239,9 @@ function animate(now) {
     arcadeCam.lookAt(0, 1.58, 0.05);
     updateVideoTexture();
     cabinet.userData.glow.intensity = 1.1 + 0.3 * Math.sin(t0 * 2.3) + 0.2 * Math.sin(t0 * 5.1);
-    cabinet.userData.spin.material.emissiveIntensity = 0.3 + 0.9 * Math.max(0, 1 - (now - lastDecisionAt) / 700);
+    { const u = clamp((now - lastDecisionAt) / 500, 0, 1), press = u < 1 ? Math.sin(u * Math.PI) : 0;   // a click: the mouse dips, its LED blinks; Space actions press the space bar instead
+      const keyAct = lastDecisionKey; cabinet.userData.mouse.position.y = 0.004 - (keyAct ? 0 : press * 0.004); cabinet.userData.mouseLed.material.color.setHex(press > 0.3 && !keyAct ? 0xffffff : BK.red);
+      cabinet.userData.space.position.y = 0.018 - (keyAct ? press * 0.005 : 0); cabinet.userData.space.material.emissiveIntensity = keyAct ? press * 1.5 : 0; }
     { const u = clamp((now - lastDecisionAt) / 900, 0, 1);              // pull (fast) then spring back (slow)
       const pull = u < 0.25 ? u / 0.25 : 1 - (u - 0.25) / 0.75; cabinet.userData.lever.rotation.x = -1.9 * Math.sin(pull * Math.PI / 2); }
     if (points) { brainGroup.rotation.set(0.1, t0 * 0.15, 0); }

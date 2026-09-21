@@ -203,6 +203,8 @@ terminal was closed or the process killed).
   screencast runs on a second CDP connection in its own thread, so its frame acks never wait for the
   brain: ~100 frames/s from the fly's browser, paced to 60 for local viewers;
 * shadows in the arcade: one 1024² map from the spot above the cabinet (~0.1 ms on an RTX; off in lite mode);
+* the cabinet's deck carries a mini keyboard and a mouse (the fly works a web page): the mouse clicks on every
+  decision, the space bar goes down for Space actions, the one-armed-bandit lever pulls too;
 * the brain keeps running while the environment waits (the reels spin for seconds) — it looks at the
   live frames, so the activity is continuous rather than a burst at each decision;
 * the point cloud is shaded on the GPU (two Uint8 activity attributes, interpolated in the vertex
