@@ -638,9 +638,9 @@ const envMap = (() => {
 // no wasp gloss. Patterns are procedural (the model has no UVs): stripes by position, fur as shells.
 const MAT = {
   // DoubleSide: the model's body plates have small gaps between segments; without back faces they showed the background through the fly
-  thorax: new THREE.MeshPhysicalMaterial({ color: 0x8f6c46, roughness: 0.82, metalness: 0.0, clearcoat: 0.06, clearcoatRoughness: 0.8, sheen: new THREE.Color(0x2a1d12), envMap, envMapIntensity: 0.25, side: THREE.DoubleSide }),
-  body:   new THREE.MeshPhysicalMaterial({ color: 0xb08c5e, roughness: 0.8, metalness: 0.0, clearcoat: 0.08, clearcoatRoughness: 0.7, sheen: new THREE.Color(0x2e2115), envMap, envMapIntensity: 0.25, side: THREE.DoubleSide }),
-  eyes:   new THREE.MeshPhysicalMaterial({ color: 0xa8161f, emissive: 0x2a0406, roughness: 0.35, metalness: 0.0, clearcoat: 0.9, clearcoatRoughness: 0.25, envMap, envMapIntensity: 0.8 }),
+  thorax: new THREE.MeshPhysicalMaterial({ color: 0xb08a5e, roughness: 0.62, metalness: 0.0, clearcoat: 0.25, clearcoatRoughness: 0.5, sheen: new THREE.Color(0x3a2a18), envMap, envMapIntensity: 0.35, side: THREE.DoubleSide }),
+  body:   new THREE.MeshPhysicalMaterial({ color: 0xcaa574, roughness: 0.6, metalness: 0.0, clearcoat: 0.3, clearcoatRoughness: 0.45, sheen: new THREE.Color(0x3a2a18), envMap, envMapIntensity: 0.35, side: THREE.DoubleSide }),
+  eyes:   new THREE.MeshPhysicalMaterial({ color: 0xd8232e, emissive: 0x3a080b, roughness: 0.18, metalness: 0.0, clearcoat: 1.0, clearcoatRoughness: 0.08, envMap, envMapIntensity: 1.2 }),
   wing:   new THREE.MeshPhysicalMaterial({ color: 0xe6f4ff, transparent: true, opacity: 0.34, roughness: 0.1, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false, envMap, envMapIntensity: 1.3 }),
   wingGhost: new THREE.MeshBasicMaterial({ color: 0xdfeeff, transparent: true, opacity: 0.09, side: THREE.DoubleSide, depthWrite: false }),
   legs:   new THREE.MeshStandardMaterial({ color: 0x2f2318, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide }),
@@ -659,7 +659,7 @@ function stripe(mat, z0, freq, dark, spread, hairFreq, fuzz = 0xd8bd95) {
         + ' float side = 1.0 - 0.35 * smoothstep(0.2, 0.9, abs(normalize(vObjPos - vec3(0.0, vObjPos.y, vObjPos.z)).x)); diffuseColor.rgb *= mix(1.0, uDark, rear * band); diffuseColor.rgb *= 0.9 + 0.1 * side;'
         + ' float h = fract(sin(dot(floor(vObjPos * uHairFreq), vec3(127.1, 311.7, 74.7))) * 43758.5453);'
         + ' float fr = pow(1.0 - max(0.0, dot(normalize(vNormal), normalize(vViewPosition))), 2.5);'
-        + ' diffuseColor.rgb *= 0.9 + 0.2 * h; diffuseColor.rgb = mix(diffuseColor.rgb, uFuzz, fr * (0.16 + 0.22 * h)); }');
+        + ' diffuseColor.rgb = mix(diffuseColor.rgb, uFuzz, fr * 0.12); }');   // soft velvet rim only - no speckle: it read as creepy
   };
   mat.needsUpdate = true;
 }
@@ -684,7 +684,8 @@ new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
   if (thorax) new THREE.Box3().setFromObject(thorax).getCenter(tc);
   const bbAll = new THREE.Box3().setFromObject(model), L = bbAll.max.z - bbAll.min.z;
   // abdomen bands behind the thorax, faint thorax stripes, fur on both
-  stripe(MAT.body, tc.z - L * 0.06, 2 * Math.PI * 4.5 / Math.max(0.01, tc.z - bbAll.min.z), 0.38, L * 0.12, 260 / L);
+  stripe(MAT.body, tc.z - L * 0.06, 2 * Math.PI * 4.5 / Math.max(0.01, tc.z - bbAll.min.z), 0.55, L * 0.12, 260 / L);
+  fly.rear = tc.z - bbAll.min.z; fly.front = bbAll.max.z - tc.z;   // model units behind / in front of the thorax (for the perch)
   stripe(MAT.thorax, tc.z + L * 0.4, 2 * Math.PI * 3.0 / (L * 0.3), 0.72, L * 0.6, 220 / L);
   stripe(MAT.legs, tc.z, 1.0, 1.0, 0.0, 400 / L, 0x6a5238);
 
@@ -712,7 +713,7 @@ new THREE.GLTFLoader().load('/assets/drosophila.glb', gltf => {
   model.position.sub(tc);                    // origin = thorax, so the body sits exactly on the landing point
   model.traverse(o => { if (o.isMesh && o.material && o.material.transparent) o.renderOrder = 20; });   // wings, fur: after the brain cloud, so they blend over it, never under
   fly.len = Math.max(size.x, size.y, size.z); fly.model = model; flyRoot.add(model); fly.ready = true;
-  if (view === 'arcade') flyRoot.scale.setScalar(0.72 / fly.len); else layout();
+  if (view === 'arcade') flyRoot.scale.setScalar(0.6 / fly.len); else layout();
 }, undefined, err => { console.warn('drosophila.glb failed', err); const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), MAT.body); m.scale.set(1, 0.8, 1.6); flyRoot.add(m); fly.len = 3.2; fly.ready = true; layout(); });
 
 // smoke: a small pool of soft sprites rising from the ember
@@ -812,34 +813,37 @@ function marqueeTexture() {   // "FLYBRAIN" and the BETKING logo (crown + wordma
   const matte = new THREE.MeshStandardMaterial({ color: 0x1a1a1f, roughness: 0.7, metalness: 0.3 });
   const steel = new THREE.MeshStandardMaterial({ color: 0x6e7690, roughness: 0.35, metalness: 0.85, envMap, envMapIntensity: 0.8 });
   const ledCyan = new THREE.MeshBasicMaterial({ color: BK.yellow }), ledPink = new THREE.MeshBasicMaterial({ color: BK.red });   // yellow edges, red accents - the site's palette
-  const pedTop = 0.92, deckBack = 0.22, ledgeH = 0.07, deckDepth = 0.62;
+  const pedTop = 0.92, deckBack = 0.22, ledgeH = 0.07, deckDepth = 0.74;
   // pedestal + kick plate + coin tray
-  const ped = roundedBox(1.0, pedTop - 0.06, 0.6, 0.04, gloss); ped.position.set(0, 0.06 + (pedTop - 0.06) / 2, 0); cabinet.add(ped);
-  const kick = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.06, 0.64), matte); kick.position.set(0, 0.03, 0); cabinet.add(kick);
-  const tray = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.11, 0.09), matte); tray.position.set(0, 0.24, 0.335); cabinet.add(tray);
-  const trayLip = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.012, 0.11), steel); trayLip.position.set(0, 0.185, 0.34); cabinet.add(trayLip);
+  const ped = roundedBox(1.0, pedTop - 0.06, 0.72, 0.04, gloss); ped.position.set(0, 0.06 + (pedTop - 0.06) / 2, 0.02); cabinet.add(ped);
+  const kick = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.06, 0.76), matte); kick.position.set(0, 0.03, 0.02); cabinet.add(kick);
+  const tray = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.11, 0.09), matte); tray.position.set(0, 0.24, 0.415); cabinet.add(tray);
+  const trayLip = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.012, 0.11), steel); trayLip.position.set(0, 0.185, 0.42); cabinet.add(trayLip);
   // control deck: slope at the back, flat ledge in front (the perch)
-  const deck = wedge(1.0, deckBack, ledgeH, deckDepth, 0.26, gloss); deck.position.set(0, pedTop, 0.02); cabinet.add(deck);
+  const deck = wedge(1.0, deckBack, ledgeH, deckDepth, 0.4, gloss); deck.position.set(0, pedTop, 0.02); cabinet.add(deck);
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0x4a4a55, transparent: true, opacity: 0.8 });   // crisp edges: the black gloss alone had none
+  [ped, deck].forEach(m => { const e = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 25), edgeMat); e.position.copy(m.position); e.rotation.copy(m.rotation); cabinet.add(e); });
   const deckTrim = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.012, 0.016), ledCyan); deckTrim.position.set(0, pedTop + ledgeH + 0.006, 0.02 + deckDepth / 2 - 0.004); cabinet.add(deckTrim);
   // buttons on the slope
-  const slopeAng = Math.atan2(deckBack - ledgeH, deckDepth - 0.26);
-  const onSlope = (mesh, u, along) => { const z0 = 0.02 + deckDepth / 2 - 0.26, y0 = pedTop + ledgeH; mesh.position.set(u, y0 + Math.sin(slopeAng) * along + 0.012 * Math.cos(slopeAng), z0 - Math.cos(slopeAng) * along - 0.012 * Math.sin(slopeAng)); mesh.rotation.x = slopeAng; cabinet.add(mesh); };
+  const slopeAng = Math.atan2(deckBack - ledgeH, deckDepth - 0.4);
+  const onSlope = (mesh, u, along) => { const z0 = 0.02 + deckDepth / 2 - 0.4, y0 = pedTop + ledgeH; mesh.position.set(u, y0 + Math.sin(slopeAng) * along + 0.012 * Math.cos(slopeAng), z0 - Math.cos(slopeAng) * along - 0.012 * Math.sin(slopeAng)); mesh.rotation.x = slopeAng; cabinet.add(mesh); };
   const spinBtn = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.08, 0.035, 32), new THREE.MeshPhysicalMaterial({ color: BK.red, emissive: BK.red, emissiveIntensity: 0.35, roughness: 0.3, clearcoat: 1 })); onSlope(spinBtn, 0.3, 0.24); cabinet.userData.spin = spinBtn;
   [BK.yellow, BK.green, 0xffad33].forEach((col, i) => { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.035, 0.025, 24), new THREE.MeshPhysicalMaterial({ color: col, emissive: col, emissiveIntensity: 0.3, roughness: 0.3, clearcoat: 1 })); onSlope(b, -0.34 + i * 0.1, 0.27); });
   // head: body box behind, bevelled frame in front, the screen recessed inside the frame's hole
   const headY = pedTop + deckBack + 0.42, tilt = -0.1;
-  const head = new THREE.Group(); head.position.set(0, headY, -0.02 + deckDepth / 2 - deckDepth); head.rotation.x = tilt; cabinet.add(head);
+  const headZ = -0.02 - deckDepth / 2;
+  const head = new THREE.Group(); head.position.set(0, headY, headZ); head.rotation.x = tilt; cabinet.add(head);
   const headBox = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.8, 0.34), matte); headBox.position.set(0, 0, -0.245); head.add(headBox);
   const frame = frameWithHole(1.0, 0.76, 0.84, 0.545, 0.05, gloss); frame.position.set(0, 0, 0); head.add(frame);
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.525), new THREE.MeshBasicMaterial({ map: vidTex, toneMapped: false })); screen.position.set(0, 0, -0.03); head.add(screen);
   const screenBack = new THREE.Mesh(new THREE.PlaneGeometry(0.86, 0.56), new THREE.MeshBasicMaterial({ color: 0x000000 })); screenBack.position.set(0, 0, -0.035); head.add(screenBack);
   [-1, 1].forEach(sg => { const strip = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.7, 0.014), ledPink); strip.position.set(sg * 0.515, 0, -0.06); head.add(strip); });
   // marquee light box
-  const mq = roundedBox(1.0, 0.2, 0.3, 0.03, matte); mq.position.set(0, headY + 0.51, -0.22); cabinet.add(mq);
-  const mqFace = new THREE.Mesh(new THREE.PlaneGeometry(0.94, 0.16), new THREE.MeshBasicMaterial({ map: marqueeTexture(), toneMapped: false })); mqFace.position.set(0, headY + 0.51, -0.22 + 0.15 + 0.014); cabinet.add(mqFace);
-  const mqGlow = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.012, 0.28), ledPink); mqGlow.position.set(0, headY + 0.51 - 0.107, -0.22); cabinet.add(mqGlow);
+  const mq = roundedBox(1.0, 0.2, 0.3, 0.03, matte); mq.position.set(0, headY + 0.51, headZ + 0.11); cabinet.add(mq);
+  const mqFace = new THREE.Mesh(new THREE.PlaneGeometry(0.94, 0.16), new THREE.MeshBasicMaterial({ map: marqueeTexture(), toneMapped: false })); mqFace.position.set(0, headY + 0.51, headZ + 0.11 + 0.15 + 0.014); cabinet.add(mqFace);
+  const mqGlow = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.012, 0.28), ledPink); mqGlow.position.set(0, headY + 0.51 - 0.107, headZ + 0.11); cabinet.add(mqGlow);
   // side LED strips down the pedestal front edges
-  [-1, 1].forEach(sg => { const strip = new THREE.Mesh(new THREE.BoxGeometry(0.012, pedTop - 0.12, 0.012), ledCyan); strip.position.set(sg * 0.5, 0.06 + (pedTop - 0.06) / 2, 0.322); cabinet.add(strip); });
+  [-1, 1].forEach(sg => { const strip = new THREE.Mesh(new THREE.BoxGeometry(0.012, pedTop - 0.12, 0.012), ledCyan); strip.position.set(sg * 0.5, 0.06 + (pedTop - 0.06) / 2, 0.402); cabinet.add(strip); });
   // lights: the screen's glow on the fly, a cone from above, room fill
   const glow = new THREE.PointLight(0xffd7dc, 1.1, 3.5, 2); glow.position.set(0, headY - 0.1, 0.55); cabinet.add(glow); cabinet.userData.glow = glow;
   const spot = new THREE.SpotLight(0xdfe6ff, 1.1, 9, 0.5, 0.6, 1.5); spot.position.set(0.4, 4.2, 1.6); spot.target.position.set(0, 1.2, 0.1); arcade.add(spot); arcade.add(spot.target);
@@ -849,15 +853,16 @@ function marqueeTexture() {   // "FLYBRAIN" and the BETKING logo (crown + wordma
   const keyA = new THREE.DirectionalLight(0xfff0dd, 0.7); keyA.position.set(-2, 4, 3); arcade.add(keyA);
   const rim = new THREE.DirectionalLight(BK.red, 0.4); rim.position.set(3, 2, -3); arcade.add(rim);
   const warm = new THREE.PointLight(0xffd6a8, 1.6, 3.5, 2); warm.position.set(0.7, 1.7, 1.3); arcade.add(warm);   // a warm lamp on the fly
+  const front = new THREE.DirectionalLight(0xe8e8f0, 0.45); front.position.set(0.5, 1.2, 4); arcade.add(front);         // front fill: the cabinet's front face reads as a face, not a hole
   // the one-armed bandit's arm: bracket on the right side of the head, shaft + red ball; pulled on every decision
-  const lever = new THREE.Group(); lever.position.set(0.53, headY - 0.22, -0.3); cabinet.add(lever);
+  const lever = new THREE.Group(); lever.position.set(0.53, headY - 0.22, headZ + 0.03); cabinet.add(lever);
   const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.16, 0.14), steel); bracket.position.set(0.03, 0, 0); lever.add(bracket);
   const pivot = new THREE.Group(); pivot.position.set(0.075, 0, 0); lever.add(pivot);
   const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.02, 0.5, 16), steel); shaft.position.set(0, 0.25, 0); pivot.add(shaft);
   const knob = new THREE.Mesh(new THREE.SphereGeometry(0.06, 24, 16), new THREE.MeshPhysicalMaterial({ color: BK.red, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.1, envMap, envMapIntensity: 0.8 })); knob.position.set(0, 0.52, 0); pivot.add(knob);
   const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.06, 20), steel); hub.rotation.z = Math.PI / 2; pivot.add(hub);
   cabinet.userData.lever = pivot;
-  cabinet.userData.perch = { y: pedTop + ledgeH, z: 0.02 + deckDepth / 2 - 0.13, screenY: headY };
+  cabinet.userData.perch = { y: pedTop + ledgeH, z: 0.02 + deckDepth / 2 - 0.13, front: 0.02 + deckDepth / 2, screenY: headY };
 }
 const brainLight = new THREE.PointLight(0x9fb4ff, 0.8, 3, 2); brainLight.position.set(0, 2.6, 0.6);
 function setView(v) {
@@ -867,7 +872,7 @@ function setView(v) {
     scene.remove(flyRoot); scene.remove(brainGroup); scene.remove(smokePts); arcade.add(flyRoot); arcade.add(brainGroup); arcade.add(brainLight); arcade.add(smokePts);
     brainGroup.position.set(0, 2.42, 0.0); brainGroup.scale.setScalar(0.58); brainGroup.position.y -= brainTop * 0.62;
     if (brainMat) { brainMat.uniforms.uCamZ.value = haloMat.uniforms.uCamZ.value = 2.6; brainMat.uniforms.uSize.value = haloMat.uniforms.uSize.value = 2.6; brainMat.uniforms.uHideBelow.value = haloMat.uniforms.uHideBelow.value = NECK; }
-    if (fly.ready) flyRoot.scale.setScalar(0.72 / fly.len);
+    if (fly.ready) flyRoot.scale.setScalar(0.6 / fly.len);
     flyState.mode = 'perch';
   } else {
     arcade.remove(flyRoot); arcade.remove(brainGroup); arcade.remove(brainLight); arcade.remove(smokePts); scene.add(flyRoot); scene.add(brainGroup); scene.add(smokePts);
@@ -1140,7 +1145,8 @@ function animate(now) {
     tmp.set(fs.pos.x + 1, fs.pos.y + 0.05, fs.pos.z + 0.55); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp); flyRoot.rotateX(-0.15); qA.copy(flyRoot.quaternion); flyRoot.quaternion.copy(qTarget).slerp(qA, Math.min(1, dt * 5));
   } else if (fs.mode === 'perch') {   // arcade: sits on the cabinet's ledge, facing the screen, watching the reels
     grounded = true;
-    const pr = cabinet.userData.perch; fs.pos.set(-0.04, pr.y + 0.085, pr.z + 0.06); flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t0 * 1.7) * 0.004;
+    const pr = cabinet.userData.perch, sc = flyRoot.scale.x, rear = (fly.rear || 0) * sc;
+    fs.pos.set(-0.04, pr.y + 0.085, pr.front - 0.04 - rear);       // the abdomen ends inside the ledge, never over the edge flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t0 * 1.7) * 0.004;
     tmp.set(fs.pos.x - 0.02, fs.pos.y + 0.02 + Math.sin(t0 * 0.6) * 0.02, fs.pos.z - 0.8); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp); flyRoot.rotateX(0.12 + Math.sin(t0 * 0.9) * 0.03); flyRoot.rotateY(Math.sin(t0 * 0.35) * 0.12);
     qA.copy(flyRoot.quaternion); flyRoot.quaternion.copy(qTarget).slerp(qA, Math.min(1, dt * 4));
     if (flyCtl.broke) smoking = true;
