@@ -41,9 +41,10 @@ def main():
     ap.add_argument("--game", default=None, help="demo game URL (must contain isMoney=false)")
     ap.add_argument("--public", action="store_true",
                     help="let colleagues watch the visualiser at http://<your-ip>:<port>/ (toggle in the page)")
-    ap.add_argument("--tunnel", nargs="?", const="auto", choices=["auto", "ngrok", "lhr", "cloudflare"], default=None,
-                    help="also open a public https link for viewers outside the network: "
-                         "auto = ngrok if installed else lhr; ngrok; lhr = localhost.run over ssh; cloudflare")
+    ap.add_argument("--tunnel", nargs="?", const="auto", choices=["auto", "ngrok", "lhr", "cloudflare", "manual"], default=None,
+                    help="public https link for viewers outside the network - OFF unless asked for: "
+                         "auto = ngrok if installed else lhr; ngrok; lhr = localhost.run over ssh; cloudflare; "
+                         "manual = do not open it, only show the on/off button in the page")
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if hasattr(signal, "SIGBREAK"):   # fly.serve stops us with Ctrl+Break -> same clean path as Ctrl+C
@@ -65,8 +66,9 @@ def main():
     if args.viz:
         from .viz import VizServer
         viz = VizServer(brain, port=args.port, open_browser=not args.no_open, public=args.public,
-                        tunnel_provider=args.tunnel or "auto")
-        if args.tunnel:
+                        tunnel_provider="auto" if args.tunnel in (None, "manual") else args.tunnel,
+                        tunnel_enabled=args.tunnel is not None)
+        if args.tunnel and args.tunnel != "manual":
             viz.set_tunnel(True, args.tunnel)
         viz.wait_for_client(timeout=3 if args.episodes <= 0 else 30)   # supervised: do not wait for viewers
 

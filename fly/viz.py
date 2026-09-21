@@ -125,13 +125,14 @@ def all_ips() -> list[str]:
 class VizServer:
     def __init__(self, brain: Brain, port: int = 8765, max_points: int = 120_000, every: int = 4,
                  tick_delay: float = 0.012, open_browser: bool = True, public: bool = False,
-                 tunnel_provider: str = "auto"):
+                 tunnel_provider: str = "auto", tunnel_enabled: bool = False):
         self.brain = brain
         self.every = every
         self.tick_delay = tick_delay
         self.public = public
         self.tunnel = None
         self.tunnel_provider = tunnel_provider
+        self.tunnel_enabled = tunnel_enabled or bool(os.environ.get("FLY_TUNNEL_URL"))   # off unless --tunnel was given
         self.commands: queue.Queue = queue.Queue()          # page -> agent loop
         self.state = {"paused": False, "mode": "browse", "broke": False}    # what the fly is doing now
         self.clients: list[Client] = []
@@ -272,7 +273,7 @@ class VizServer:
                     meta = dict(server.meta, local=local, public=server.public,
                                 lan_url=f"http://{server.lan}:{server.port}/",
                                 lan_urls=[f"http://{ip}:{server.port}/" for ip in server.ips],
-                                tunnel_url=server.tunnel_url, tunnel_managed=server.tunnel_managed,
+                                tunnel_url=server.tunnel_url, tunnel_managed=server.tunnel_managed, tunnel_enabled=server.tunnel_enabled,
                                 state=server.state, session=os.path.exists(SESSION_FILE) or bool(os.environ.get("FLY_PHPSESSID")))
                     self._send(json.dumps(meta).encode(), "application/json")
                 elif u.path == "/admin/cmd":          # page -> fly: pause / resume / casino / browse
@@ -370,6 +371,8 @@ class VizServer:
         """Start/stop a public tunnel (localhost.run over ssh, or cloudflared); starting also switches
         remote access on. Viewers through the tunnel count as remote (proxy headers), never as admins."""
         from .tunnel import open_tunnel
+        if not self.tunnel_enabled:
+            raise RuntimeError("the tunnel is disabled: start with --tunnel (or --tunnel manual) to allow it")
         if self.tunnel_managed:
             print("viz: the tunnel is owned by fly.serve - stop/start it there")
             return

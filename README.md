@@ -46,13 +46,14 @@ python -m fly.build
 python -m fly.run --casino --viz
 ```
 
-Keep it running forever with hot reload and a public link (recommended):
+Keep it running forever with hot reload (recommended):
 
 ```bash
-python -m fly.serve --casino --tunnel
+python -m fly.serve --casino
 ```
 
-Then open `http://127.0.0.1:8765/`.
+Then open `http://127.0.0.1:8765/`. Everything stays on your machine: no LAN access, no public
+link — those are separate, opt-in flags (see *Watching from elsewhere*).
 
 ### First run: whose account?
 
@@ -190,8 +191,15 @@ The server listens on all interfaces but admits remote viewers only when remote 
 (`--public`, or the tunnel button in the fly card, or `curl "http://127.0.0.1:8765/admin/public?on=1"`).
 LAN addresses are printed at start. Windows will ask for a firewall rule for python on the first run.
 
-`--tunnel` (auto = ngrok if installed, else localhost.run) opens a public https link and prints it;
-the link also shows next to the tunnel button. Remote viewers get the newest activity frame at 4/s
+A public link is **off unless you ask for it**; without the flag the page has no tunnel button at all:
+
+```bash
+python -m fly.serve --casino --tunnel
+```
+
+`--tunnel` (auto = ngrok if installed, else localhost.run; or `ngrok` / `lhr` / `cloudflare`) opens a
+public https link at start and prints it; the link also shows next to the tunnel button.
+`--tunnel manual` only shows the on/off button in the page and opens nothing until you click it. Remote viewers get the newest activity frame at 4/s
 and video at ~8 fps (streams never queue), the brain as a 15 KB bitmask, gzip-compressed and cached
 assets — about 150–200 KB/s. ngrok: `winget install --id 9MVS1J51GMK6 --source msstore`, then
 `ngrok config add-authtoken <token>` once; the free tier shows a "Visit Site" page once per viewer.

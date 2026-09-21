@@ -545,7 +545,7 @@ function setupRemote(meta) {
   isLocal = !!meta.local; lastMeta = meta;
   if (!meta.local) return;
   const box = $('remote'), tbtn = $('tunbtn'), turl = $('tunurl');
-  box.style.display = 'flex';
+  box.style.display = meta.tunnel_enabled ? 'flex' : 'none';     // no --tunnel flag: no tunnel button at all
   const show = (on, lan, tun) => { tbtn.textContent = meta.tunnel_managed ? 'serve' : tun ? t('on') : t('off'); tbtn.className = tun ? 'on' : ''; turl.textContent = tun || ''; tbtn.disabled = !!meta.tunnel_managed; tbtn.title = meta.tunnel_managed ? t('tunnel_serve') : ''; };
   window.showRemote = show;
   show(meta.public, meta.lan_url, meta.tunnel_url);

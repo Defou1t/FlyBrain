@@ -9,7 +9,8 @@ changes, so improving the project never stops the fly for more than a restart.
   compile, so a half-typed edit is ignored and the running fly keeps going; viz/index.html needs no
   restart (the page reloads itself);
 * a crashed worker is restarted after a short pause;
-* the public tunnel (--tunnel) is owned by the supervisor, so the link stays the same across restarts.
+* the public tunnel is OFF unless asked for: --tunnel opens one (owned by the supervisor, so the link
+  stays the same across restarts), --tunnel manual only shows the on/off button in the page.
 Ctrl+C stops everything.
 """
 from __future__ import annotations
@@ -168,11 +169,14 @@ def split_args(argv: list[str]):
         if a == "--public":
             mine["public"] = True
         elif a == "--tunnel":
-            if i + 1 < len(argv) and argv[i + 1] in ("auto", "ngrok", "lhr", "cloudflare"):
+            if i + 1 < len(argv) and argv[i + 1] in ("auto", "ngrok", "lhr", "cloudflare", "manual"):
                 mine["tunnel"] = argv[i + 1]
                 i += 1
             else:
                 mine["tunnel"] = "auto"
+            if mine["tunnel"] == "manual":            # the fly shows the button; nobody opens a link unasked
+                rest += ["--tunnel", "manual"]
+                del mine["tunnel"]
         elif a in ("--port", "--episodes"):
             mine[a.lstrip("-")] = argv[i + 1]
             i += 1
