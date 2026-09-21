@@ -27,11 +27,24 @@ click / stake ◄── softmax over the available actions ◄── spikes of 5
 
 ## Quick start
 
+**No Python needed.** `start.bat` (Windows) downloads a private Python 3.12 (the official embeddable
+build, ~11 MB) into `runtime/python`, installs everything there, installs Chromium, builds the brain
+(first run only, ~560 MB download) and starts the fly. Nothing else on the computer is touched and
+no other Python installation - older, newer, Microsoft Store - can conflict with it.
+
+```bash
+git clone https://github.com/Defou1t/FlyBrain.git && cd FlyBrain && start.bat
+```
+
+`start.bat --setup` only installs, `start.bat --synthetic` is a quick test on a random brain
+(nothing to download), `start.bat --tunnel` adds a public link. Linux / macOS: `./start.sh` does the
+same with a private virtualenv in `runtime/venv` (needs a system `python3` 3.11+).
+
+Manually, with a Python of your own (3.11+):
+
 ```bash
 pip install -r requirements.txt && python -m playwright install chromium
 ```
-
-On Windows `start.bat` does all of that (creates a venv, installs, builds the brain, starts the fly).
 
 Smoke test on a random 20k-neuron brain (nothing to download):
 
