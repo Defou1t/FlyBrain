@@ -1,259 +1,224 @@
-# FlyBrain — муха в браузере
+# FlyBrain — a fly's brain playing slots in a browser
 
-Копия мозга мухи (коннектом **MaleCNS v1.0**, HHMI Janelia — 211 тыс. нейронов, 25.6 млн синапсов)
-симулируется как сеть LIF-нейронов и «ходит» по сайту: смотрит на скриншот страницы глазами,
-а спайки нисходящих (descending) и моторных нейронов решают, по какой внутренней ссылке кликнуть.
+A copy of a fruit-fly brain — the **MaleCNS v1.0** connectome (HHMI Janelia: 211,577 neurons,
+25.6 million synapses) — simulated as a network of leaky integrate-and-fire neurons, looking at a real
+web page through its eyes and acting in a real browser. The connectome is frozen; only a linear
+readout on top of the descending and motor neurons is trained (REINFORCE), and the reward is
+delivered the way a fly gets it: as dopamine — into the PPL101 pair when it loses and into the PAM
+cluster when it wins. Same recipe as DOOMFLY / FLYT3 from [awesome-fly](https://github.com/cobanov/awesome-fly).
 
-Схема та же, что у DOOMFLY / FLYT3 из [awesome-fly](https://github.com/cobanov/awesome-fly):
-коннектом заморожен, обучается только линейный readout (REINFORCE), отрицательная награда
-подаётся током в дофаминовую пару PPL101.
+The fly's job here is a casino: it walks into the lobby of betking.com.ua, picks a slot, opens it in
+**demo mode** (play money, `isMoney=false`), chooses its stakes, and keeps a bank of its own — 50,000 FUN
+it believes it is spending. Appetite, stake patterns, lucky and unlucky slots, goals and busts are
+tracked on top of the brain, and everything is visible live: the brain, the 3-D fly, the browser
+window, and the dopamine / appetite / winnings chart.
+
+![FlyBrain](docs/screenshot.jpg)
 
 ```
-скриншот ──► сетчатка (R1-R6 по гекс-колонкам, 2 глаза) ──► LIF по всему коннектому
+screenshot ──► retina (R1-R6 per hex column, two eyes) ──► LIF over the whole connectome
                                                                      │
-клик по ссылке ◄── softmax по доступным ссылкам ◄── спайки 512 DN + 512 motor
+click / stake ◄── softmax over the available actions ◄── spikes of 512 DN + 512 motor neurons
+                                                                     ▲
+                     win → PAM (+)   loss → PPL101 (−)   ────── dopamine
 ```
 
-## Запуск
+## Quick start
 
 ```bash
 pip install -r requirements.txt && python -m playwright install chromium
 ```
 
-Быстрый прогон на случайном мозге (20 тыс. нейронов, без скачивания):
+On Windows `start.bat` does all of that (creates a venv, installs, builds the brain, starts the fly).
+
+Smoke test on a random 20k-neuron brain (nothing to download):
 
 ```bash
 python -m fly.run --synthetic --headed --steps 6
 ```
 
-Настоящий мозг (скачает ~560 МБ в `data/`, соберёт `data/brain.npz`, один раз):
+The real brain (downloads ~560 MB into `data/`, builds `data/brain.npz` once):
 
 ```bash
 python -m fly.build
-python -m fly.run --headed --episodes 3 --steps 8
+python -m fly.run --casino --viz
 ```
 
-## Живая визуализация
-
-```bash
-python -m fly.run --viz --episodes 10 --steps 8
-```
-
-Откроется `http://127.0.0.1:8765/` — рабочий стол из карточек. Каждую можно тянуть за заголовок
-(прилипают к краям друг друга и окна), растягивать за правый нижний угол, разворачивать кнопкой ⤢;
-раскладка запоминается в браузере, «↺ раскладка» возвращает стандартную.
-
-* **Мозг мухи** — в своей рамке: облако из 120 тыс. сом нейронов MaleCNS, подсвечивается спайками;
-  отделы, работающие сильнее, светятся ярче целиком, самые стойко активные нейроны выделены крупными
-  точками, внизу подпись «сейчас сильнее всего: …»; тянуть мышью — вращать;
-* **Drosophila** — 3D-муха (NeuroMechFly v2, EPFL flygym, Apache-2.0; крылья на шарнирах, ноги
-  поджимаются в полёте); отсюда она летит к целям и сюда возвращается; клик по ней — меню;
-* **Браузер мухи** — окно с вкладкой и адресной строкой, живое видео страницы, рамки ссылок/кнопок;
-  муха садится точно на выбранный элемент (координата цели пересчитывается каждый кадр, поэтому
-  карточку можно двигать даже во время полёта);
-* остальные карточки — состояние, банк и азарт (с кривой дофамина), активность по отделам, растр
-  спайков readout-нейронов, доля активных нейронов, softmax решения, журнал.
-
-В окно браузера идёт живое видео — скринкаст самого Chromium (кадр на каждую перерисовку,
-до 30 к/с, JPEG 1024 px): барабаны крутятся, лента ставок листается, а не только скриншот на
-момент решения. Скорость решения: `--ticks 48`
-(тиков LIF на решение, по умолчанию) при ~12 мс/тик в режиме визуализации ≈ 0.6 с, `--pace 1.1` —
-пауза, чтобы муха долетела до кнопки; остальное время — сама игра (барабаны ~3 с + отсчёт
-выигрыша). `--no-open` — не открывать браузер. Three.js и модель лежат в `viz/assets/`, интернет
-странице не нужен.
-
-## Управление мухой в странице
-
-Клик по мухе (курсор становится «рукой») открывает шестерёнку:
-
-* **Остановить полёт / Возобновить полёт** — только анимация: муха либо летает, либо ходит пешком
-  по экрану со сложенными крыльями;
-* **Прогнать / Вернуть** — муха перестаёт что-либо делать: мозг продолжает смотреть на страницу
-  (активность видна), но кликов нет, пока её не вернут;
-* **Дать 50 000 FUN** (появляется, когда банк пуст) — муха бросает сигарету и идёт играть;
-* **Крутить слоты / Гулять по сайту** — переключение занятия на ходу: в режиме слотов муха идёт в
-  список слотов Amusnet, сама выбирает игру (это тоже решение readout-а), открывает её в демо
-  (`isMoney=false`) и крутит; обратно — снова гуляет по вкладкам.
-
-Меню видно только с localhost; зрители через туннель и по сети управлять не могут
-(`/admin/cmd`). Команды доходят до мухи между шагами (несколько секунд).
-
-## Казино: игра на демо-счёте
-
-```bash
-python -m fly.run --casino --viz --episodes 5 --steps 20
-```
-
-Муха заходит в список слотов Amusnet (`/games/top-provider-games-amusnet/`), выбирает карточку игры
-(шаг с наградой 0) и открывает её в демо (`?game=<slug>&isMoney=false`, играются FUN-кредиты);
-с `--game <url>` открывает указанную игру сразу. Действия — кнопки ставок самой игры `#bet-slider button[id^=bet-]` (в играх Amusnet
-клик по ставке = поставить и крутить); лента ставок прокручивается стрелками, среда сама
-докручивает до выбранной кнопки (до 32 номиналов, 0.10 … 40 FUN). Награда за спин —
-`(выигрыш − ставка) / ставка`, обрезано в [−1, 3]: проигрыш ставки → −1 → ток в PPL101
-(аверсивный дофамин), выигрыш → + → ток в PAM-кластер (316 нейронов, дофамин награды).
-Выигрыш читается из `#win-amount-field` (игра зачисляет его на баланс только при следующем спине,
-поэтому «баланс» в панели = поле баланса + незачисленный выигрыш). Каждый спин пишется в
-`data/dopamine.csv` (ставка, баланс до/после, выигрыш, дельта, дофамин ±, накопленная кривая);
-в визуализации — плитки баланса и кривая дофамина.
-
-### Азарт: желание играть, паттерны ставок, удачные слоты
-
-`fly/drive.py` — мотивация мухи поверх мозга. У мухи **свой банк — 50 000 FUN**: демо-счёт игры она
-не читает как свой, а считает, что тратит собственные деньги, и они переносятся между слотами и
-перезапусками (`data/drive.json`). Ставки дороже остатка ей недоступны; когда банк пуст — муха
-садится, закуривает и ждёт (мозг продолжает работать), пока с localhost через шестерёнку не дадут
-ещё 50 000 («Дать 50 000 FUN»). Все проценты ниже считаются от банка на момент открытия слота.
-
-
-* **азарт** (0–1): растёт от выигрышей (пропорционально дофамину), падает на каждом проигрыше,
-  медленно возвращается к середине. Ниже 0.18 после ≥ 5 спинов — «пропал азарт», муха меняет слот;
-  ниже 0.10 — уходит гулять по сайту на один эпизод и возвращается;
-* **6 пустых спинов подряд** (ни копейки выигрыша; маленький выигрыш серию сбрасывает —
-  `LOSS_STREAK_SWITCH`) или **слив** (−30 % от стартового баланса слота) — смена слота, слот
-  помечается неудачным (✗) и в лобби избегается **45 минут** (`UNLUCKY_TTL`), потом получает шанс
-  снова — иначе со временем все слоты становятся «неудачными» и муха ходит только по незнакомым;
-* **неиграбельные слоты**: клиент открылся (Amusnet, FUN), но полосы ставок `#bet-slider` в нём нет
-  (например Gorgon's Luck — чисто canvas-интерфейс) — слот помечается `unplayable`, в лобби больше не
-  показывается; муха возвращается в лобби и выбирает другой;
-* **удачный слот** (🍀): баланс +10 % от стартового в этой сессии; в лобби предпочитается;
-* **цель +15 %**: фиксируется событие с временем, балансом и числом спинов, стартовый баланс
-  переустанавливается на текущий (следующие +15 % считаются от него);
-* **паттерн ставок**: после выигрыша муха хочет ставку ×1.4 (×2 при крупном), после проигрышей
-  ×0.75 (×0.5 после трёх подряд), при высоком азарте ещё ×1.3 — это лог-приор к softmax
-  readout-а, окончательный выбор всё равно за мозгом.
-
-События (`goal`, `lucky`, `bust`, `switch`) пишутся в `data/events.jsonl`, статистика по слотам —
-в `data/drive.json`; в панели справа — шкала азарта, текущий слот, журнал событий с временем и
-таблица слотов (спины, итог, лучший %). Вторая строка плиток — **минимум и максимум банка** за
-сессию (с временем, когда они случились), число спинов и начало сессии; сессия начинается с
-выдачи денег (старт или «Дать 50 000 FUN»).
-
-Конец спина определяется по клиенту Amusnet (`_wait_settle`): через ~0.2 с после клика баланс
-уменьшается на ставку и `#info-line` пустеет; барабаны останавливаются через 2.3–5 с; пустой спин
-возвращает подсказку «зробіть ставку», выигрыш показывает строку `Лінія N 4x = 0.40 FUN`, и поле
-выигрыша ~1.5 с «крутит» сумму от 0 до итога (муха ждёт, пока счётчик остановится). Выигрыш
-зачисляется на демо-счёт при следующем спине.
-
-Защита от реальных денег (`fly/casino.py`, не удалять): URL игры обязан содержать `isMoney=false`;
-любой запрос с `isMoney=true` или к кассе/депозиту/выводу режется на сетевом уровне; перед каждым
-действием проверяется, что в игре видна валюта `FUN`.
-
-Диагностика без ставок — `python -m fly.casino` пишет `data/casino_probe.json` (фреймы, текст
-баланса, найденные кнопки ставок, кадры websocket).
-
-## Постоянная работа и горячий перезапуск
+Keep it running forever with hot reload and a public link (recommended):
 
 ```bash
 python -m fly.serve --casino --tunnel
 ```
 
-`fly/serve.py` держит муху запущенной бесконечно (`--episodes 0`) и следит за `fly/*.py`: после
-сохранения файла муха аккуратно останавливается (браузер закрывается, readout уже сохранён после
-каждого эпизода) и стартует с новым кодом — обучение продолжается с того же чекпоинта. Файл с
-синтаксической ошибкой перезапуск не вызывает («does not compile yet, keeping the old fly running»),
-упавшая муха поднимается через несколько секунд, `viz/index.html` вообще не требует перезапуска —
-открытые страницы перезагружаются сами. Туннель при `--tunnel` держит сам супервизор, поэтому
-публичная ссылка не меняется при перезапусках. Супервизор сажает себя и всех потомков (муху,
-её Chromium, ngrok/ssh) в Windows Job Object с kill-on-close: как бы он ни завершился — Ctrl+C,
-закрытое окно, падение — дети умирают вместе с ним и порт освобождается; на старте он сам
-добивает «осиротевшую» муху, если та ещё держит порт (чужую программу на порту не трогает —
-просит другой `--port`). Остановить всё — Ctrl+C. Все флаги `fly.run`
-(`--steps`, `--game`, `--synthetic`, `--port`, `--public` …) передаются как есть.
+Then open `http://127.0.0.1:8765/`.
 
-Всё, что печатают супервизор и муха, дублируется с временем в `data/fly.log` (обрезается на 8 МБ):
-если муха «сломалась» после того, как терминал уже закрыт, ответ ищите там — последняя строка
-`serve: supervisor exited` означает, что супервизор завершили штатно (Ctrl+C), обрыв лога без неё —
-что окно терминала закрыли или процесс убили.
+### First run: whose account?
 
-## Наблюдение коллегами по сети
+The fly plays demo slots as a guest; no account is needed. If you want it to walk the site as
+**your** account, give it the `PHPSESSID` cookie of your own session: the page asks for it on the
+first run (gear menu → *Use my own account*), or put the value into `data/session.txt` (one line) or
+`$FLY_PHPSESSID`. The file is git-ignored and the value is never printed. Never use somebody
+else's cookie. Registration, login, cashier, deposit, withdrawal, profile and settings links are
+filtered out (`FORBIDDEN` in `fly/browser.py`) — extend that list, never shrink it.
 
-Сервер визуализации слушает все интерфейсы, но удалённых зрителей пускает только когда доступ
-включён. Включить сразу: `--public`; включение туннеля (кнопка внизу левой колонки) включает и
-доступ по сети. Вручную:
+## The page
 
-```bash
-curl "http://127.0.0.1:8765/admin/public?on=1"
-```
+Everything is a card: drag by the header (cards snap to each other and to the window), resize by the
+corner, ⤢ maximizes, *↺ layout* restores the default. The UI is English; **EN / UK** in the corner
+switches to Ukrainian.
 
-(`on=0` — выключить; уже подключённые удалённые зрители отваливаются). Адреса для коллег печатаются
-при старте — по одному на каждый интерфейс (LAN, VPN/Tailscale, виртуальные), и показываются рядом с
-кнопкой. При первом запуске Windows спросит разрешение брандмауэра для python — разрешить для
-частных и публичных сетей (или `netsh advfirewall firewall add rule name=FlyBrain dir=in action=allow
-protocol=TCP localport=8765`). Доступ только на просмотр: управления в странице нет.
+* **Fly brain** — 120k neuron somas of MaleCNS as a GPU-shaded point cloud. Resting neurons are a
+  cool blue tint of their region, stimulated ones turn amber, firing ones white; regions that work
+  harder glow as a whole; the footer names the strongest regions. Drag to rotate. Activity arrives as a
+  spike bitmask 10–20× per second and the shader interpolates between frames, so the cloud breathes
+  smoothly at any display rate (120 fps on a 120 Hz screen).
+* **Drosophila** — the 3-D fly (NeuroMechFly v2, EPFL flygym, Apache-2.0): hinged wings with motion
+  ghosts, legs that tuck in flight, spring-based steering. It flies to the element it decided on and
+  lands exactly on it; when broke it sits down and smokes until somebody gives it money. Click it for
+  the gear menu.
+* **The fly's browser** — a browser window with the live video of the fly's Chromium as motion-JPEG
+  (~60 fps locally, ~8 fps through a tunnel); the reels really spin. Boxes mark the available actions.
+* **Dopamine · appetite · winnings** — the hero chart: dopamine per spin as bars (amber up = PAM,
+  pink down = PPL101), appetite as an amber line, the bank as a green line, win ticks under the axis,
+  and statistics: hit rate, Σ dopamine, net, mean appetite, and the correlation between appetite and
+  the bank. The history is served by the fly (`/history.json`), so a page reload does not reset it.
+* **The fly's bank** — bank, stake, win, demo balance; min / max bank of the session with the time
+  they happened; spins; the appetite bar; the current slot; the event log (goals, lucky slots, busts,
+  switches, refills) and the slot table.
+* the rest: state, activity by brain region, readout spike raster, active-neuron trace, the softmax
+  decision, the log.
 
-Если с другого устройства не открывается, проверьте с него `curl http://<IP>:8765/meta.json`:
-`403` — доступ выключен; таймаут — сеть: устройство не в той же подсети (Wi-Fi-роутеры часто
-изолируют клиентов друг от друга, гостевые сети — всегда), либо брандмауэр.
+### The gear menu (click the fly; localhost only)
 
-### Туннель: ссылка для коллег вне сети
+* **Stop flying / Fly again** — animation only: the fly flies, or walks with folded wings;
+* **Shoo away / Let it work** — no actions until let back; the brain keeps watching;
+* **Spin the slots / Wander the site** — switch the activity on the fly;
+* **Give 50 000 FUN** — appears when the bank is empty;
+* **Use my own account (PHPSESSID)…** — see above; the fly restarts with the cookie;
+* **Reset results & memory…** — bank back to 50,000, slot memory, learned readout weights, the
+  dopamine log and the charts all start over (asks for confirmation).
 
-```bash
-python -m fly.run --casino --viz --tunnel
-```
+Viewers through the tunnel or the LAN can watch but not control (`/admin/*` is local-only).
 
-Поднимает публичный https-адрес и печатает его (`viz: tunnel ON -> https://….lhr.life`); он же
-показывается у кнопки «туннель» внизу левой колонки, которой туннель включается/выключается на ходу
-(или `curl "http://127.0.0.1:8765/admin/tunnel?on=1"` / `on=0`). Аккаунт не нужен, ссылка меняется при
-каждом запуске, при обрыве сессия переподнимается сама и в странице появляется новая ссылка.
-Зрители через туннель считаются удалёнными: только просмотр, админ-переключатели им недоступны.
+## The casino
 
-Через туннель страница заведомо тяжелее, чем локально, поэтому поток адаптивный: каждому зрителю
-отдаётся только самый свежий кадр видео и самый свежий кадр активности (без очереди), удалённым —
-реже (видео ~5 к/с, активность 4 р/с против 25–30 локально); активность идёт битовой маской
-(1 бит на нейрон, ~15 КБ вместо 120), скриншоты страницы — JPEG, статика (three.js, модель, сомы)
-сжата gzip и кэшируется на сутки, так что перезапуски мухи не перекачивают 8 МБ. Итого удалённому
-зрителю нужно ~150–200 КБ/с. Если и этого много (localhost.run — бесплатный и небыстрый), варианты
-лучше: свой сервер с `ssh -R 0.0.0.0:8765:127.0.0.1:8765 user@server` (`GatewayPorts yes`),
-ngrok/cloudflared (если доступны из сети), либо VPN до вашей машины.
+The fly opens a lobby (`/casino/`, the Amusnet list and *all slots* in rotation), and every card is an
+action (reward 0). The chosen game opens in demo mode (`?game=<slug>&isMoney=false`).
 
-Провайдеры (`fly/tunnel.py`), `--tunnel` без значения = `auto`:
-* **ngrok** (по умолчанию, если установлен): `winget install --id 9MVS1J51GMK6 --source msstore`
-  (winget-пакет `Ngrok.Ngrok` устарел — 3.3, не читает новый конфиг), один раз
-  `ngrok config add-authtoken <токен>` (dashboard.ngrok.com → Your Authtoken). Быстрый, стабильный;
-  на бесплатном тарифе при первом заходе показывает страницу «Visit Site» — нажать один раз.
-* **lhr** — localhost.run через `ssh -R`: ничего ставить не надо, но медленно; запасной вариант,
-  на него `auto` откатывается, если ngrok не запустился (нет токена и т.п.).
-* **cloudflare** — quick tunnel через cloudflared; из нашей сети `api.trycloudflare.com` не отвечает
-  (проверено дважды, TCP до него не открывается), так что здесь не работает.
+**Amusnet clients** (the HTML5 client with `#bet-slider`): actions are the game's own stake buttons
+(a click places the bet and spins; the strip is paged by arrows, the environment pages it to the
+chosen button; up to 32 stakes, 0.10 … 40 FUN). The end of a spin is read from the client: ~0.2 s
+after the click the balance drops by the stake and `#info-line` goes blank; the reels stop 2.3–5 s
+later; a dead spin brings back the "place your bet" prompt, a win shows `Line N 4x = 0.40 FUN` and
+the win field counts up to the total. Free-spin bonuses keep the fields moving and are waited out
+(up to 150 s). The game credits a win to the demo balance only at the next spin, and that balance is
+the ground truth: at every spin start it must equal *previous balance + previous win − stake*;
+anything above that is a win the fly had not seen (bonus, gamble) and is credited then.
 
-## Сессия (вход в аккаунт)
+**Any other provider** (`fly/generic.py`): the fly has to figure the game out. Actions are a 6×4 grid
+of tap targets over the game area plus the Space key (a prior favours the bottom-right, where spin
+buttons live). The observation is what the client leaks on the wire: XHR / fetch / WebSocket responses
+are sniffed for balance / win fields; a balance drop after an action is the stake, a win field or a
+balance rise is the win. Twelve actions without any money signal → the game is marked unplayable and
+the fly goes back to the lobby. Before every action the sniffer must have seen a demo marker
+(`demo / fun / free / practice / isMoney=false`) in the game's own requests and no real-money marker.
 
-Муха может гулять по сайту под вашим аккаунтом. Положите значение cookie `PHPSESSID` в
-`data/session.txt` (одна строка) или в переменную окружения `FLY_PHPSESSID` — файл в `.gitignore`,
-значение нигде не печатается. В окне браузера появится «сессия: вошла».
+Reward per spin = `(win − stake) / stake` clipped to [−1, 3]. Every spin goes to `data/dopamine.csv`
+(stake, balances, win, reward, bank, appetite).
 
-Ссылки на регистрацию, вход, кассу, депозит, вывод, кабинет, настройки, запуск игр и ставки
-отфильтрованы (`FORBIDDEN` в `fly/browser.py`) — муха только переходит по вкладкам. С живой сессией
-этот список — единственное, что удерживает её от денег; расширяйте, не сужайте.
+Hard guards (`fly/casino.py`, do not remove): the game URL must contain `isMoney=false`; any request
+with `isMoney=true` or to cashier / deposit / withdraw / payment endpoints is aborted at the network
+layer; Amusnet clients must show the play-money currency `FUN`, other clients must show demo evidence.
 
-## Файлы
+### Appetite, stake patterns, lucky slots (`fly/drive.py`)
 
-| файл | что |
+The fly has **its own bank — 50,000 FUN**; it does not read the demo balance as its money. The bank
+persists across slots and restarts (`data/drive.json`). Stakes it cannot afford are masked; when the
+bank is empty it sits down, lights a cigarette and waits (the brain keeps working) for *Give 50 000
+FUN*. Percentages below are relative to the bank when the slot was opened.
+
+* **appetite** (0–1) grows with wins (in proportion to dopamine), drops on every dead spin, drifts
+  back to the middle. Below 0.18 after ≥ 5 spins → "lost interest", the fly changes the slot; below
+  0.10 → it leaves for a walk around the site for one episode and comes back;
+* **6 dead spins in a row** (`LOSS_STREAK_SWITCH`; a small win resets the streak) or a **bust**
+  (−30 % from the slot's start) → slot change; the slot is marked unlucky (✗) and avoided for
+  45 minutes (`UNLUCKY_TTL`), then gets another chance;
+* **lucky slot** (🍀): +10 % over the start in one session — preferred in the lobby;
+* **goal +15 %**: recorded with time, balance and spins; the start is re-based;
+* **stake pattern**: after a win the fly wants ×1.4 (×2 after a big one), after losses ×0.75 (×0.5
+  after three), high appetite adds ×1.3 — a log-prior to the readout's softmax; the brain still decides.
+* **unplayable** games (no stake strip, no money signal) are hidden from the lobby.
+
+Events go to `data/events.jsonl`, slot statistics to `data/drive.json`.
+
+## Running forever: `fly.serve`
+
+`python -m fly.serve --casino --tunnel` keeps the fly running (`--episodes 0`), watches `fly/*.py`
+and hot-restarts the fly when the code changes (only after the changed files compile; the readout
+checkpoint survives, so learning continues); `viz/index.html` needs no restart — open pages reload
+themselves. A crashed fly is restarted after a short pause. The supervisor owns the tunnel, so the
+public link survives restarts. On Windows it puts itself and all children (the fly, its Chromium,
+ngrok) into a Job Object with kill-on-close: however it ends — Ctrl+C, a closed window, a crash — the
+children die with it and the port is freed. Everything both processes print goes to `data/fly.log`
+with timestamps (`serve: supervisor exited` at the end = a clean stop; a log that just ends = the
+terminal was closed or the process killed).
+
+### Performance
+
+* the fly's Chromium runs in the *new* headless mode of the full browser (`channel="chromium"`),
+  which renders with the GPU: the slot clients run at the display rate (~120 fps on an RTX 5080)
+  instead of SwiftShader's ~24; the CDP screencast follows;
+* the live view is motion-JPEG (`/stream.mjpg`): the `<img>` decodes natively, no JSON, no base64;
+* the brain keeps running while the environment waits (the reels spin for seconds) — it looks at the
+  live frames, so the activity is continuous rather than a burst at each decision;
+* the point cloud is shaded on the GPU (two Uint8 activity attributes, interpolated in the vertex
+  shader); the page's own frame time is ~0.5 ms of JavaScript.
+
+## Watching from elsewhere
+
+The server listens on all interfaces but admits remote viewers only when remote access is on
+(`--public`, or the tunnel button in the fly card, or `curl "http://127.0.0.1:8765/admin/public?on=1"`).
+LAN addresses are printed at start. Windows will ask for a firewall rule for python on the first run.
+
+`--tunnel` (auto = ngrok if installed, else localhost.run) opens a public https link and prints it;
+the link also shows next to the tunnel button. Remote viewers get the newest activity frame at 4/s
+and video at ~8 fps (streams never queue), the brain as a 15 KB bitmask, gzip-compressed and cached
+assets — about 150–200 KB/s. ngrok: `winget install --id 9MVS1J51GMK6 --source msstore`, then
+`ngrok config add-authtoken <token>` once; the free tier shows a "Visit Site" page once per viewer.
+Cloudflare quick tunnels are also supported when `api.trycloudflare.com` is reachable from your network.
+
+## Files
+
+| file | what |
 |---|---|
-| `fly/connectome.py` | загрузка feather → CSR-матрица, знак по нейромедиатору (GABA/Glu = тормозные), сетчатка = R1-R6 → гекс-координаты их L1-партнёров, топ-512 DN и motor, PPL101, координаты сом |
-| `fly/brain.py` | LIF: утечка 0.85, гомеостаз порога под 3 % фоновой активности |
-| `fly/senses.py` | скриншот → яркость 36×39 на глаз → ток в фоторецепторы; дофамин при r < 0 |
-| `fly/motor.py` | линейный readout + REINFORCE с baseline и энтропией, чекпоинт `data/readout*.npz` |
-| `fly/browser.py` | Playwright-среда: cookie сессии, сбор внутренних ссылок с bbox, клик, награда |
-| `fly/casino.py` | среда демо-казино: кнопки ставок как действия, баланс из DOM/websocket, награда = Δбаланс/ставка, лог дофамина, защита от реальных денег |
-| `fly/agent.py` | цикл эпизода |
-| `fly/viz.py` | HTTP + SSE сервер: сомы, активность, скриншоты, решения, доступ по сети |
-| `fly/tunnel.py` | публичная ссылка: localhost.run через ssh или cloudflared, автопереподключение |
-| `fly/serve.py` | супервизор: бесконечная работа, горячий перезапуск при изменении кода |
-| `fly/drive.py` | азарт: желание играть, паттерн ставок, смена слота, удачные/неудачные слоты, события |
-| `viz/index.html` | сцена: муха + мозг (Three.js), окно браузера, панель активности и дофамина |
+| `fly/connectome.py` | feather → CSR matrix, sign by neurotransmitter (GABA/Glu inhibitory), retina = R1-R6 → hex columns of their L1 partners, top-512 DN and motor, PPL101 / PAM, soma coordinates |
+| `fly/brain.py` | LIF: leak 0.85, homeostatic threshold for a 3 % background rate |
+| `fly/senses.py` | screenshot → luminance 36×39 per eye → photoreceptor current; dopamine currents |
+| `fly/motor.py` | linear readout + REINFORCE with baseline and entropy, checkpoint `data/readout*.npz` |
+| `fly/browser.py` | Playwright environment: GPU headless Chromium, session cookie, internal links with boxes, screencast, the FORBIDDEN filter |
+| `fly/casino.py` | demo-casino environment: lobby, Amusnet driver, spin settling, bank correction, real-money guards |
+| `fly/generic.py` | other providers: tap grid + Space, network sniffer for balance / win, demo evidence |
+| `fly/drive.py` | appetite, stake pattern, slot switching, lucky / unlucky / unplayable slots, events, bank min/max |
+| `fly/agent.py` | episode loop, gear commands (pause, switch, refill, reset, restart), idle brain hook |
+| `fly/viz.py` | HTTP + SSE server: somas, activity bitmask, MJPEG stream, history, admin endpoints |
+| `fly/tunnel.py` | public link: ngrok / localhost.run / cloudflared with reconnect |
+| `fly/serve.py` | supervisor: run forever, hot restart on code change, log to `data/fly.log` |
+| `viz/index.html` | the page: cards, Three.js brain + fly, browser window, charts, EN/UK |
+| `tools/pack.py` | builds a shareable zip of the project (no data, no secrets) |
 
-## Заглушки (что менять дальше)
+## Sharing the project
 
-* **Награда** (`browser.py: WebEnv.step`): сейчас +1 за новую страницу, −0.2 за повтор, −1 за ошибку.
-  Сюда ставится настоящая цель.
-* **Действия**: слот = порядковый номер ссылки на странице (до 32).
-* **Сенсорика**: только яркость. Можно добавить цвет через R7/R8, текст ссылок через
-  обонятельные нейроны и т.д.
+```bash
+python tools/pack.py
+```
 
-## Данные и лицензии
+writes `dist/FlyBrain-<date>.zip` with the code, the page, the vendored assets, `start.bat` and this
+README — no downloaded data, no session cookie, no logs. The recipient runs `start.bat` (Windows) or
+the commands from *Quick start*; the brain is downloaded and built on their machine (~560 MB).
+
+## Data and licences
 
 * MaleCNS v1.0 — HHMI Janelia FlyEM, CC-BY 4.0, `gs://flyem-male-cns/v1.0/`.
-* 3D-модель мухи — NeuroMechFly v2 (Wang-Chen et al., 2024, Nature Methods; EPFL flygym, Apache-2.0),
-  glTF-сборка из проекта [housefly](https://github.com/sandbornm/housefly); см. `viz/assets/NOTICE`.
+* The 3-D fly — NeuroMechFly v2 (Wang-Chen et al., 2024, Nature Methods; EPFL flygym, Apache-2.0),
+  glTF build from [housefly](https://github.com/sandbornm/housefly); see `viz/assets/NOTICE`.
 * Three.js r128 — MIT.

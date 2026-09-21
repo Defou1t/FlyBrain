@@ -12,3 +12,5 @@ data/dopamine*.csv
 data/drive.json
 data/events.jsonl
 data/fly.log
+dist/
+.venv/
