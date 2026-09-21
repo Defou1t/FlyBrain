@@ -1,7 +1,7 @@
 """Keep the fly running: a supervisor that runs `fly.run` forever and hot-restarts it when the code
 changes, so improving the project never stops the fly for more than a restart.
 
-    python -m fly.serve --casino --viz --tunnel [any other fly.run flags]
+    python -m fly.serve --casino [--tunnel] [--no-open] [any other fly.run flags]
 
 * the worker (`python -m fly.run ... --episodes 0`) runs endlessly; the readout checkpoint survives
   restarts, so learning continues;
@@ -18,10 +18,12 @@ from __future__ import annotations
 import os
 import py_compile
 import signal
+import socket
 import subprocess
 import sys
 import threading
 import time
+import webbrowser
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WATCH_DIR = os.path.join(ROOT, "fly")
@@ -46,7 +48,7 @@ def say(line: str, echo: bool = True):
             f.write(time.strftime("%d.%m %H:%M:%S ") + line + "\n")
     except OSError:
         pass
-SUPERVISOR_ONLY = {"--tunnel", "--public", "--port", "--episodes"}
+SUPERVISOR_ONLY = {"--tunnel", "--public", "--port", "--episodes", "--no-open"}
 
 
 def bind_children_to_me():
@@ -137,6 +139,21 @@ def free_port(port: int):
                          f"pick another --port")
 
 
+def open_page_when_up(port: int, timeout: float = 120.0):
+    """The worker is started with --no-open (it restarts many times); the supervisor opens the page
+    once, as soon as the first fly is listening."""
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=1.0):
+                pass
+            say(f"serve: opening http://127.0.0.1:{port}/")
+            webbrowser.open(f"http://127.0.0.1:{port}/")
+            return
+        except OSError:
+            time.sleep(1.0)
+
+
 def snapshot() -> dict[str, float]:
     out = {}
     for name in os.listdir(WATCH_DIR):
@@ -168,6 +185,8 @@ def split_args(argv: list[str]):
         a = argv[i]
         if a == "--public":
             mine["public"] = True
+        elif a == "--no-open":
+            mine["no_open"] = True
         elif a == "--tunnel":
             if i + 1 < len(argv) and argv[i + 1] in ("auto", "ngrok", "lhr", "cloudflare", "manual"):
                 mine["tunnel"] = argv[i + 1]
@@ -253,6 +272,8 @@ def main():
 
     worker = Worker(worker_args, env)
     worker.start()
+    if not mine.get("no_open"):
+        threading.Thread(target=open_page_when_up, args=(port,), daemon=True).start()
     seen = snapshot()
     pending: dict[str, float] = {}
     crashes = 0
