@@ -97,10 +97,12 @@ switches to Ukrainian.
   harder glow as a whole; the footer names the strongest regions. Drag to rotate. Activity arrives as a
   spike bitmask 10–20× per second and the shader interpolates between frames, so the cloud breathes
   smoothly at any display rate (120 fps on a 120 Hz screen).
-* **Drosophila** — the 3-D fly: **flybody** (TuragaLab / Google DeepMind, Apache-2.0; segmented legs and
-  abdomen, antennae, proboscis, wing veins, thorax bristles), built from the MJCF + OBJ meshes by
-  `tools/build_flybody.py` (welded, decimated to ~130k triangles, per-part shade as vertex colour);
-  `?model=nmf` switches to the older NeuroMechFly build. Skins in the site's palette (`gold` default,
+* **Drosophila** — the 3-D fly. Default is a **cartoon mascot** built from primitives (round gold body with
+  bands, big glossy red eyes with highlights, stubby legs, big translucent wings, toon shading with soft
+  outlines, a little smile) - friendly rather than realistic. Two scanned bodies stay available:
+  `?model=flybody` (TuragaLab / Google DeepMind flybody, Apache-2.0: segmented legs and abdomen, antennae,
+  proboscis, wing veins, bristles; built from the MJCF + OBJ meshes by `tools/build_flybody.py`) and
+  `?model=nmf` (the older NeuroMechFly build). Skins in the site's palette (`gold` default,
   `?skin=cream|snow|pearl`). Hinged wings with motion ghosts, legs that tuck in flight, spring-based steering. It flies to the element it decided on and
   lands exactly on it; when broke it sits down and smokes until somebody gives it money. Click it for
   the gear menu.

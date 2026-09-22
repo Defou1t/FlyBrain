@@ -677,8 +677,8 @@ function smoothGeometry(g) {
 }
 // which body: 'flybody' (TuragaLab / DeepMind, Apache-2.0: segmented legs, antennae, proboscis, wing veins) or the
 // older NeuroMechFly build ('nmf'); ?model= to compare
-let modelName = 'flybody'; try { modelName = new URLSearchParams(location.search).get('model') || localStorage.getItem('fly.model') || 'flybody'; } catch (e) {}
-try { localStorage.setItem('fly.model', modelName); } catch (e) {}
+let modelName = 'cartoon'; try { modelName = new URLSearchParams(location.search).get('model') || localStorage.getItem('fly.model2') || 'cartoon'; } catch (e) {}
+try { localStorage.setItem('fly.model2', modelName); } catch (e) {}
 // skins: 'gold' (default) is the mascot look in the site's palette - toy-like golden body, red eyes, dark legs;
 // it stands out against the black cabinet and the colourful games without the glare of pure white
 const SKINS = {
@@ -691,27 +691,90 @@ let skinName = 'gold'; try { skinName = new URLSearchParams(location.search).get
 function applySkin(name) {
   const k = SKINS[name] || SKINS.gold; skinName = name; try { localStorage.setItem('fly.skin', name); } catch (e) {}
   MAT.thorax.color.set(k.thorax); MAT.body.color.set(k.body); MAT.legs.color.set(k.legs); MAT.eyes.color.set(k.eyes);
+  if (typeof TOON_BASE !== 'undefined') { TOON_BASE.thorax.set(k.thorax).multiplyScalar(0.95); TOON_BASE.body.set(k.body); TOON_BASE.legs.set(k.legs); TOON_BASE.eyes.set(k.eyes); setToonGain(toonGain); }
   for (const m of [MAT.thorax, MAT.body]) { m.roughness = k.rough ?? 0.55; m.clearcoat = k.coat ?? 0.3; m.envMapIntensity = k.coat ? 0.55 : 0.4; }
   for (const m of [MAT.thorax, MAT.body, MAT.legs]) if (m.userData.shader) { m.userData.shader.uniforms.uFuzz.value.set(k.fuzz); if (m !== MAT.legs) m.userData.shader.uniforms.uDark.value = k.stripes; }
 }
+// ---- the cartoon fly (default): a friendly mascot built from primitives - round body, big glossy eyes with
+// highlights, stubby bent legs, big translucent wings, toon shading with soft outlines. Same node names as
+// the scanned models (thorax / body / eyes / lWing / rWing / legs), so the animation code does not care.
+const toonGradient = (() => { const d = new Uint8Array([90, 90, 90, 175, 175, 175, 255, 255, 255]); const t = new THREE.DataTexture(d, 3, 1, THREE.RGBFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
+const TOON = {
+  thorax: new THREE.MeshToonMaterial({ color: 0xe9b93a, gradientMap: toonGradient }),
+  body:   new THREE.MeshToonMaterial({ color: 0xf5c842, gradientMap: toonGradient }),
+  band:   new THREE.MeshToonMaterial({ color: 0x9a6a1c, gradientMap: toonGradient }),
+  eyes:   new THREE.MeshToonMaterial({ color: 0xe60037, gradientMap: toonGradient }),
+  shine:  new THREE.MeshBasicMaterial({ color: 0xffffff }),
+  legs:   new THREE.MeshToonMaterial({ color: 0x3a3236, gradientMap: toonGradient }),
+  wing:   new THREE.MeshPhysicalMaterial({ color: 0xe4f3ff, transparent: true, opacity: 0.38, roughness: 0.15, metalness: 0.05, side: THREE.DoubleSide, depthWrite: false, envMap, envMapIntensity: 0.9 }),
+  vein:   new THREE.MeshBasicMaterial({ color: 0x7d9fbf, transparent: true, opacity: 0.6, depthWrite: false }),
+  outline: new THREE.MeshBasicMaterial({ color: 0x1a1208, side: THREE.BackSide }),
+};
+// the arcade's lights add up to ~3x: toon colours are stored at a third so the bright step lands on the true colour
+const TOON_BASE = {}; for (const k of ['thorax', 'body', 'band', 'eyes', 'legs']) TOON_BASE[k] = TOON[k].color.clone();
+let toonGain = 0.34;
+function setToonGain(g) { toonGain = g; for (const k in TOON_BASE) TOON[k].color.copy(TOON_BASE[k]).multiplyScalar(g); }
+setToonGain(0.34);
+function outlined(mesh, k = 1.07) { const o = new THREE.Mesh(mesh.geometry, TOON.outline); o.scale.setScalar(k); mesh.add(o); return mesh; }
+function tube(a, b, r, mat) {   // a bent leg segment between two points
+  const d = new THREE.Vector3().subVectors(b, a), len = d.length();
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.8, r, len, 10), mat); m.position.copy(a).addScaledVector(d, 0.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize()); return m;
+}
+function buildCartoonFly() {
+  const model = new THREE.Group(); model.name = 'cartoon';
+  const thorax = outlined(new THREE.Mesh(new THREE.SphereGeometry(0.78, 40, 28), TOON.thorax)); thorax.name = 'thorax'; thorax.scale.set(1, 0.92, 1.05); thorax.position.set(0, 0.05, 0.25); model.add(thorax);
+  const body = new THREE.Group(); body.name = 'body'; model.add(body);
+  const abd = outlined(new THREE.Mesh(new THREE.SphereGeometry(0.8, 40, 28), TOON.body)); abd.scale.set(1, 0.9, 1.45); abd.position.set(0, -0.08, -1.05); body.add(abd);
+  [-0.35, 0.05, 0.45].forEach((z, i) => { const ring = new THREE.Mesh(new THREE.TorusGeometry(0.8 * Math.sqrt(Math.max(0.05, 1 - (z / 1.45) ** 2)) * 1.01, 0.06, 10, 48), TOON.band); ring.rotation.x = Math.PI / 2; ring.position.set(0, -0.08, -1.05 + z * 1.0); ring.scale.set(1, 1, 0.9); body.add(ring); });
+  const head = outlined(new THREE.Mesh(new THREE.SphereGeometry(0.58, 32, 24), TOON.thorax)); head.position.set(0, 0.18, 1.2); body.add(head);
+  [-1, 1].forEach(sg => { const ant = tube(new THREE.Vector3(sg * 0.15, 0.62, 1.45), new THREE.Vector3(sg * 0.38, 0.98, 1.62), 0.035, TOON.legs); body.add(ant); const tipA = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), TOON.legs); tipA.position.set(sg * 0.38, 0.98, 1.62); body.add(tipA); });
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.035, 8, 24, Math.PI), TOON.band); mouth.position.set(0, -0.12, 1.66); mouth.rotation.set(0, 0, Math.PI); body.add(mouth);   // a little smile
+  const eyes = new THREE.Group(); eyes.name = 'eyes'; model.add(eyes);
+  [-1, 1].forEach(sg => { const e = outlined(new THREE.Mesh(new THREE.SphereGeometry(0.4, 32, 24), TOON.eyes), 1.05); e.position.set(sg * 0.42, 0.32, 1.42); eyes.add(e);
+    const sh = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), TOON.shine); sh.position.set(sg * 0.55, 0.52, 1.72); eyes.add(sh);
+    const sh2 = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), TOON.shine); sh2.position.set(sg * 0.33, 0.14, 1.78); eyes.add(sh2); });
+  const legs = new THREE.Group(); legs.name = 'legs'; model.add(legs);
+  const legSpec = [[0.75, 0.9, 1.35], [0.15, 0.1, -0.15], [-0.45, -0.85, -1.55]];   // [hip z, knee z, foot z] for front / middle / hind pairs
+  legSpec.forEach(([hz, kz, fz]) => [-1, 1].forEach(sg => {
+    const hip = new THREE.Vector3(sg * 0.55, -0.35, hz), knee = new THREE.Vector3(sg * 1.25, 0.25, kz), foot = new THREE.Vector3(sg * 1.55, -1.05, fz);
+    legs.add(tube(hip, knee, 0.075, TOON.legs)); legs.add(tube(knee, foot, 0.06, TOON.legs));
+    const kb = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), TOON.legs); kb.position.copy(knee); legs.add(kb);
+    const fb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), TOON.legs); fb.position.copy(foot); fb.scale.set(1.3, 0.6, 1.3); legs.add(fb); }));
+  [-1, 1].forEach(sg => {   // wings: ellipses pointing back and outwards, veins as thin strips
+    const w = new THREE.Group(); w.name = sg < 0 ? 'lWing' : 'rWing';
+    const shape = new THREE.Shape(); shape.absellipse(0, 0, 1.55, 0.62, 0, Math.PI * 2, false, 0);
+    const wm = new THREE.Mesh(new THREE.ShapeGeometry(shape, 40), TOON.wing); wm.rotation.x = -Math.PI / 2; wm.rotation.z = 0; wm.position.set(0, 0, -1.35); w.add(wm);
+    [[-0.55, 0.12], [-0.55, -0.12], [-1.0, 0.2], [-1.0, -0.22]].forEach(([dz, dx]) => { const v = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.005, 1.3), TOON.vein); v.position.set(dx, 0.003, dz - 0.3); v.rotation.y = dx * 0.35; w.add(v); });
+    w.position.set(sg * 0.35, 0.72, 0.3); w.rotation.y = sg * 0.65; w.rotation.z = sg * -0.08;   // hinge at the thorax top, swept back-outwards
+    model.add(w);
+  });
+  return model;
+}
 function loadFly() { if (fly.ready) return;
-new THREE.GLTFLoader().load(modelName === 'nmf' ? '/assets/drosophila.glb' : '/assets/drosophila-flybody.glb', gltf => {
-  const model = gltf.scene; let legsMesh = null, bodyMesh = null;
-  model.traverse(o => { if (!o.isMesh) return; const n = o.name.toLowerCase(); if (!n.includes('wing')) o.geometry = smoothGeometry(o.geometry);
+if (modelName === 'cartoon') { setTimeout(() => setupModel(buildCartoonFly()), 0); return; }   // deferred: the rest of the script (view, cabinet) must exist first
+new THREE.GLTFLoader().load(modelName === 'nmf' ? '/assets/drosophila.glb' : '/assets/drosophila-flybody.glb', gltf => setupModel(gltf.scene),
+  err => {}, err => { console.warn('fly model failed to load, retrying', err); setTimeout(loadFly, 2500); });   // e.g. the fly restarting mid-load: retry, never a placeholder
+}
+function setupModel(model) {
+  let legsMesh = null, bodyMesh = null;
+  const cartoon = model.name === 'cartoon';
+  if (!cartoon) model.traverse(o => { if (!o.isMesh) return; const n = o.name.toLowerCase(); if (!n.includes('wing')) o.geometry = smoothGeometry(o.geometry);
     if (o.geometry.attributes.color) for (const m of Object.values(MAT)) { m.vertexColors = true; m.needsUpdate = true; }   // flybody: shade factors per part (black claws, antenna tips, lighter underside)
     o.material = n.includes('wing') ? MAT.wing : n.includes('eye') ? MAT.eyes : n.includes('thorax') ? MAT.thorax : n.includes('leg') ? MAT.legs : MAT.body;
     if (n.includes('wing')) fly.wings.push({ mesh: o, s: n.startsWith('l') ? -1 : 1 }); if (n.includes('leg')) legsMesh = o; if (n === 'body') bodyMesh = o; });
+  if (cartoon) { fly.wings = [{ mesh: model.getObjectByName('lWing'), s: -1 }, { mesh: model.getObjectByName('rWing'), s: 1 }]; legsMesh = model.getObjectByName('legs'); bodyMesh = model.getObjectByName('body'); }
   model.updateMatrixWorld(true);
   const thorax = model.getObjectByName('thorax'), tc = new THREE.Vector3();
   if (thorax) new THREE.Box3().setFromObject(thorax).getCenter(tc);
   const bbAll = new THREE.Box3().setFromObject(model), L = bbAll.max.z - bbAll.min.z;
 
   // abdomen bands behind the thorax, faint thorax stripes, fur on both
-  stripe(MAT.body, tc.z - L * 0.06, 2 * Math.PI * 4.5 / Math.max(0.01, tc.z - bbAll.min.z), 0.8, L * 0.12, 260 / L, 0xfff4e6);
+  if (!cartoon) stripe(MAT.body, tc.z - L * 0.06, 2 * Math.PI * 4.5 / Math.max(0.01, tc.z - bbAll.min.z), 0.8, L * 0.12, 260 / L, 0xfff4e6);
   fly.rear = tc.z - bbAll.min.z; fly.front = bbAll.max.z - tc.z;   // model units behind / in front of the thorax (for the perch)
   fly.below = tc.y - bbAll.min.y;                                   // ... and below it (leg tips), so it stands on a surface
-  stripe(MAT.thorax, tc.z + L * 0.4, 2 * Math.PI * 3.0 / (L * 0.3), 0.9, L * 0.6, 220 / L, 0xfff4e6);
-  stripe(MAT.legs, tc.z, 1.0, 1.0, 0.0, 400 / L, 0xbfb0a4);
+  if (!cartoon) stripe(MAT.thorax, tc.z + L * 0.4, 2 * Math.PI * 3.0 / (L * 0.3), 0.9, L * 0.6, 220 / L, 0xfff4e6);
+  if (!cartoon) stripe(MAT.legs, tc.z, 1.0, 1.0, 0.0, 400 / L, 0xbfb0a4);
   applySkin(skinName);
 
   fly.wings = fly.wings.map(({ mesh, s }) => {
@@ -720,11 +783,13 @@ new THREE.GLTFLoader().load(modelName === 'nmf' ? '/assets/drosophila.glb' : '/a
     const pivot = new THREE.Group(); pivot.position.copy(hinge); model.add(pivot); pivot.attach(mesh);
     // where does the wing point as modelled? angle in the XZ plane from "straight back" (-z) towards +x
     mesh.updateMatrix();
-    let tip = new THREE.Vector3(), far = 0; const pa = mesh.geometry.attributes.position, tv = new THREE.Vector3();
-    for (let i = 0; i < pa.count; i += 7) { tv.fromBufferAttribute(pa, i).applyMatrix4(mesh.matrix); const d = tv.distanceToSquared(new THREE.Vector3()); if (d > far) { far = d; tip.copy(tv); } }
+    let tip = new THREE.Vector3(), far = 0; const src = mesh.isMesh ? mesh : mesh.children.find(c => c.isMesh); src.updateMatrix(); const pa = src.geometry.attributes.position, tv = new THREE.Vector3();
+    const toPivot = mesh.isMesh ? mesh.matrix : new THREE.Matrix4().multiplyMatrices(mesh.matrix, src.matrix);
+    for (let i = 0; i < pa.count; i += 7) { tv.fromBufferAttribute(pa, i).applyMatrix4(toPivot); const d = tv.distanceToSquared(new THREE.Vector3()); if (d > far) { far = d; tip.copy(tv); } }
     const theta = Math.atan2(tip.x, -tip.z), dir = tip.x < 0 ? -1 : 1, sideT = dir * Math.PI / 2 * 0.88, backT = dir * 0.1;
     const yawBack = theta - backT, yawSide = theta - sideT;  // rotation about Y: folded back in a slight V / opened to the side
-    const ghosts = [-1.1, 1.1].map(ph => { const g = new THREE.Group(); g.position.copy(hinge); model.add(g); const m = new THREE.Mesh(mesh.geometry, MAT.wingGhost); m.position.copy(mesh.position); m.quaternion.copy(mesh.quaternion); m.scale.copy(mesh.scale); m.visible = false; g.add(m); return { pivot: g, ph, mesh: m }; });
+    const ghostSrc = mesh.isMesh ? mesh : mesh.children.find(c => c.isMesh);
+    const ghosts = [-1.1, 1.1].map(ph => { const g = new THREE.Group(); g.position.copy(hinge); model.add(g); const m = new THREE.Mesh(ghostSrc.geometry, MAT.wingGhost); m.position.copy(mesh.position); m.quaternion.copy(mesh.quaternion); m.scale.copy(mesh.scale); if (!mesh.isMesh) { m.position.add(ghostSrc.position.clone().applyQuaternion(mesh.quaternion)); m.quaternion.multiply(ghostSrc.quaternion); } m.visible = false; g.add(m); return { pivot: g, ph, mesh: m }; });
     return { pivot, s, mesh, ghosts, yawBack, yawSide };
   });
   if (legsMesh) { const lp = new THREE.Group(); lp.position.copy(tc); model.add(lp); lp.attach(legsMesh); fly.legs = lp; }
@@ -744,10 +809,9 @@ new THREE.GLTFLoader().load(modelName === 'nmf' ? '/assets/drosophila.glb' : '/a
   const size = core.isEmpty() ? new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3()) : core.getSize(new THREE.Vector3());
   model.position.sub(tc);                    // origin = thorax, so the body sits exactly on the landing point
   model.traverse(o => { if (o.isMesh && o.material && o.material.transparent) o.renderOrder = 20; });   // wings, fur: after the brain cloud, so they blend over it, never under
-  model.traverse(o => { if (o.isMesh && !o.material.transparent) { o.castShadow = true; o.receiveShadow = true; } });
+  model.traverse(o => { if (o.isMesh && !o.material.transparent && o.material !== TOON.outline) { o.castShadow = true; o.receiveShadow = true; } });
   fly.len = Math.max(size.x, size.y, size.z); fly.model = model; flyRoot.add(model); fly.ready = true;
   if (view === 'arcade') flyRoot.scale.setScalar(0.5 / fly.len); else layout();
-}, undefined, err => { console.warn('fly model failed to load, retrying', err); setTimeout(loadFly, 2500); });   // e.g. the fly restarting mid-load: retry, never a placeholder
 }
 loadFly();
 
@@ -929,7 +993,9 @@ function setView(v) {
     if (brainMat) { brainMat.uniforms.uCamZ.value = haloMat.uniforms.uCamZ.value = 2.6; brainMat.uniforms.uSize.value = haloMat.uniforms.uSize.value = 2.6; brainMat.uniforms.uHideBelow.value = haloMat.uniforms.uHideBelow.value = NECK; }
     if (fly.ready) flyRoot.scale.setScalar(0.5 / fly.len);
     flyState.mode = 'perch';
+    if (typeof setToonGain === 'function') setToonGain(0.34);
   } else {
+    if (typeof setToonGain === 'function') setToonGain(0.55);
     arcade.remove(flyRoot); arcade.remove(brainGroup); arcade.remove(brainLight); arcade.remove(smokePts); scene.add(flyRoot); scene.add(brainGroup); scene.add(smokePts);
     if (brainMat) { brainMat.uniforms.uCamZ.value = haloMat.uniforms.uCamZ.value = camera.position.z; brainMat.uniforms.uHideBelow.value = haloMat.uniforms.uHideBelow.value = -9; }
     flyState.mode = flyCtl.broke ? 'smoke' : flyCtl.anim === 'walk' ? 'walk' : 'hover';
