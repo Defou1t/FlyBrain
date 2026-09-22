@@ -682,16 +682,17 @@ try { localStorage.setItem('fly.model2', modelName); } catch (e) {}
 // skins: 'gold' (default) is the mascot look in the site's palette - toy-like golden body, red eyes, dark legs;
 // it stands out against the black cabinet and the colourful games without the glare of pure white
 const SKINS = {
+  betking: { thorax: 0x474752, body: 0x3e3e48, legs: 0x2a2a31, fuzz: 0x8a8a99, stripes: 0.6, eyes: 0xe60037, rough: 0.5, coat: 0.5, toonThorax: 0x474752, toonBody: 0x3e3e48, band: 0x1e1e24 },
   gold:  { thorax: 0xd9a93c, body: 0xf0c452, legs: 0x3a3236, fuzz: 0xfff0b0, stripes: 0.62, eyes: 0xe60037, rough: 0.42, coat: 0.6 },
   cream: { thorax: 0xece2d4, body: 0xf4ece2, legs: 0x8d7a66, fuzz: 0xfff4e6, stripes: 0.8, eyes: 0xe0262f },
   snow:  { thorax: 0xf2eaea, body: 0xfaf3f0, legs: 0x9a8c86, fuzz: 0xffe4e4, stripes: 0.88, eyes: 0xe8303a },
   pearl: { thorax: 0xe6e9ee, body: 0xf3f5f8, legs: 0x8a8f99, fuzz: 0xffffff, stripes: 0.85, eyes: 0xd9262e },
 };
-let skinName = 'gold'; try { skinName = new URLSearchParams(location.search).get('skin') || localStorage.getItem('fly.skin') || 'gold'; } catch (e) {}
+let skinName = 'betking'; try { skinName = new URLSearchParams(location.search).get('skin') || localStorage.getItem('fly.skin2') || 'betking'; } catch (e) {}
 function applySkin(name) {
-  const k = SKINS[name] || SKINS.gold; skinName = name; try { localStorage.setItem('fly.skin', name); } catch (e) {}
+  const k = SKINS[name] || SKINS.betking; skinName = name; try { localStorage.setItem('fly.skin2', name); } catch (e) {}
   MAT.thorax.color.set(k.thorax); MAT.body.color.set(k.body); MAT.legs.color.set(k.legs); MAT.eyes.color.set(k.eyes);
-  if (typeof TOON_BASE !== 'undefined') { TOON_BASE.thorax.set(k.thorax).multiplyScalar(0.95); TOON_BASE.body.set(k.body); TOON_BASE.legs.set(k.legs); TOON_BASE.eyes.set(k.eyes); setToonGain(toonGain); }
+  if (typeof TOON_BASE !== 'undefined') { TOON_BASE.thorax.set(k.toonThorax ?? k.thorax).multiplyScalar(0.95); TOON_BASE.body.set(k.toonBody ?? k.body); TOON_BASE.legs.set(k.legs); TOON_BASE.eyes.set(k.eyes); if (k.band) TOON_BASE.band.set(k.band); setToonGain(toonGain); }
   for (const m of [MAT.thorax, MAT.body]) { m.roughness = k.rough ?? 0.55; m.clearcoat = k.coat ?? 0.3; m.envMapIntensity = k.coat ? 0.55 : 0.4; }
   for (const m of [MAT.thorax, MAT.body, MAT.legs]) if (m.userData.shader) { m.userData.shader.uniforms.uFuzz.value.set(k.fuzz); if (m !== MAT.legs) m.userData.shader.uniforms.uDark.value = k.stripes; }
 }
@@ -700,15 +701,15 @@ function applySkin(name) {
 // the scanned models (thorax / body / eyes / lWing / rWing / legs), so the animation code does not care.
 const toonGradient = (() => { const d = new Uint8Array([90, 90, 90, 175, 175, 175, 255, 255, 255]); const t = new THREE.DataTexture(d, 3, 1, THREE.RGBFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
 const TOON = {
-  thorax: new THREE.MeshToonMaterial({ color: 0xe9b93a, gradientMap: toonGradient }),
-  body:   new THREE.MeshToonMaterial({ color: 0xf5c842, gradientMap: toonGradient }),
-  band:   new THREE.MeshToonMaterial({ color: 0x9a6a1c, gradientMap: toonGradient }),
+  thorax: new THREE.MeshToonMaterial({ color: 0x474752, gradientMap: toonGradient }),   // a black fly, in the site's palette: charcoal body,
+  body:   new THREE.MeshToonMaterial({ color: 0x3e3e48, gradientMap: toonGradient }),   // yellow bands, red eyes
+  band:   new THREE.MeshToonMaterial({ color: 0x1e1e24, gradientMap: toonGradient }),   // segment lines (yellow bands read as a wasp)
   eyes:   new THREE.MeshToonMaterial({ color: 0xe60037, gradientMap: toonGradient }),
   shine:  new THREE.MeshBasicMaterial({ color: 0xffffff }),
-  legs:   new THREE.MeshToonMaterial({ color: 0x3a3236, gradientMap: toonGradient }),
+  legs:   new THREE.MeshToonMaterial({ color: 0x2a2a31, gradientMap: toonGradient }),
   wing:   new THREE.MeshPhysicalMaterial({ color: 0xe4f3ff, transparent: true, opacity: 0.38, roughness: 0.15, metalness: 0.05, side: THREE.DoubleSide, depthWrite: false, envMap, envMapIntensity: 0.9 }),
   vein:   new THREE.MeshBasicMaterial({ color: 0x7d9fbf, transparent: true, opacity: 0.6, depthWrite: false }),
-  outline: new THREE.MeshBasicMaterial({ color: 0x1a1208, side: THREE.BackSide }),
+  outline: new THREE.MeshBasicMaterial({ color: 0x0b0b0e, side: THREE.BackSide }),
 };
 // the arcade's lights add up to ~3x: toon colours are stored at a third so the bright step lands on the true colour
 const TOON_BASE = {}; for (const k of ['thorax', 'body', 'band', 'eyes', 'legs']) TOON_BASE[k] = TOON[k].color.clone();
@@ -726,7 +727,7 @@ function buildCartoonFly() {
   const thorax = outlined(new THREE.Mesh(new THREE.SphereGeometry(0.78, 40, 28), TOON.thorax)); thorax.name = 'thorax'; thorax.scale.set(1, 0.92, 1.05); thorax.position.set(0, 0.05, 0.25); model.add(thorax);
   const body = new THREE.Group(); body.name = 'body'; model.add(body);
   const abd = outlined(new THREE.Mesh(new THREE.SphereGeometry(0.8, 40, 28), TOON.body)); abd.scale.set(1, 0.9, 1.45); abd.position.set(0, -0.08, -1.05); body.add(abd);
-  [-0.35, 0.05, 0.45].forEach((z, i) => { const ring = new THREE.Mesh(new THREE.TorusGeometry(0.8 * Math.sqrt(Math.max(0.05, 1 - (z / 1.45) ** 2)) * 1.01, 0.06, 10, 48), TOON.band); ring.rotation.x = Math.PI / 2; ring.position.set(0, -0.08, -1.05 + z * 1.0); ring.scale.set(1, 1, 0.9); body.add(ring); });
+  [-0.62, -0.05, 0.5].forEach(z => { const r = 0.8 * Math.sqrt(Math.max(0.05, 1 - (z / 1.16) ** 2)); const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 0.045, 10, 48), TOON.band); ring.rotation.x = Math.PI / 2; ring.position.set(0, -0.08, -1.05 + z); ring.scale.set(1, 1, 0.9); body.add(ring); });
   const head = outlined(new THREE.Mesh(new THREE.SphereGeometry(0.58, 32, 24), TOON.thorax)); head.position.set(0, 0.18, 1.2); body.add(head);
   [-1, 1].forEach(sg => { const ant = tube(new THREE.Vector3(sg * 0.15, 0.62, 1.45), new THREE.Vector3(sg * 0.38, 0.98, 1.62), 0.035, TOON.legs); body.add(ant); const tipA = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), TOON.legs); tipA.position.set(sg * 0.38, 0.98, 1.62); body.add(tipA); });
   const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.035, 8, 24, Math.PI), TOON.band); mouth.position.set(0, -0.12, 1.66); mouth.rotation.set(0, 0, Math.PI); body.add(mouth);   // a little smile
@@ -734,19 +735,23 @@ function buildCartoonFly() {
   [-1, 1].forEach(sg => { const e = outlined(new THREE.Mesh(new THREE.SphereGeometry(0.4, 32, 24), TOON.eyes), 1.05); e.position.set(sg * 0.42, 0.32, 1.42); eyes.add(e);
     const sh = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), TOON.shine); sh.position.set(sg * 0.55, 0.52, 1.72); eyes.add(sh);
     const sh2 = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), TOON.shine); sh2.position.set(sg * 0.33, 0.14, 1.78); eyes.add(sh2); });
-  const legs = new THREE.Group(); legs.name = 'legs'; model.add(legs);
-  const legSpec = [[0.75, 0.9, 1.35], [0.15, 0.1, -0.15], [-0.45, -0.85, -1.55]];   // [hip z, knee z, foot z] for front / middle / hind pairs
-  legSpec.forEach(([hz, kz, fz]) => [-1, 1].forEach(sg => {
-    const hip = new THREE.Vector3(sg * 0.55, -0.35, hz), knee = new THREE.Vector3(sg * 1.25, 0.25, kz), foot = new THREE.Vector3(sg * 1.55, -1.05, fz);
-    legs.add(tube(hip, knee, 0.075, TOON.legs)); legs.add(tube(knee, foot, 0.06, TOON.legs));
-    const kb = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), TOON.legs); kb.position.copy(knee); legs.add(kb);
-    const fb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), TOON.legs); fb.position.copy(foot); fb.scale.set(1.3, 0.6, 1.3); legs.add(fb); }));
+  // legs: smooth "noodle" tubes along a curve hip -> knee -> foot, each hung on its hip so it can swing
+  const legs = new THREE.Group(); legs.name = 'legs'; model.add(legs); fly.legParts = [];
+  const legSpec = [[0.75, 0.95, 1.4], [0.15, 0.1, -0.2], [-0.45, -0.9, -1.6]];   // [hip z, knee z, foot z] for front / middle / hind pairs
+  legSpec.forEach(([hz, kz, fz], pair) => [-1, 1].forEach(sg => {
+    const hip = new THREE.Vector3(sg * 0.55, -0.3, hz), knee = new THREE.Vector3(sg * 1.2, 0.3, kz), foot = new THREE.Vector3(sg * 1.55, -1.05, fz);
+    const leg = new THREE.Group(); leg.position.copy(hip); legs.add(leg);
+    const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), knee.clone().sub(hip), foot.clone().sub(hip)], false, 'catmullrom', 0.6);
+    const tubeMesh = new THREE.Mesh(new THREE.TubeGeometry(curve, 18, 0.062, 10, false), TOON.legs); leg.add(tubeMesh);
+    const fb = new THREE.Mesh(new THREE.SphereGeometry(0.095, 12, 10), TOON.legs); fb.position.copy(foot).sub(hip); fb.scale.set(1.35, 0.55, 1.35); leg.add(fb);
+    const hb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), TOON.legs); leg.add(hb);
+    fly.legParts.push({ group: leg, phase: (pair + (sg > 0 ? 1 : 0)) % 2 ? Math.PI : 0, idle: Math.random() * 6.3, side: sg }); }));
   [-1, 1].forEach(sg => {   // wings: ellipses pointing back and outwards, veins as thin strips
     const w = new THREE.Group(); w.name = sg < 0 ? 'lWing' : 'rWing';
-    const shape = new THREE.Shape(); shape.absellipse(0, 0, 1.55, 0.62, 0, Math.PI * 2, false, 0);
-    const wm = new THREE.Mesh(new THREE.ShapeGeometry(shape, 40), TOON.wing); wm.rotation.x = -Math.PI / 2; wm.rotation.z = 0; wm.position.set(0, 0, -1.35); w.add(wm);
-    [[-0.55, 0.12], [-0.55, -0.12], [-1.0, 0.2], [-1.0, -0.22]].forEach(([dz, dx]) => { const v = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.005, 1.3), TOON.vein); v.position.set(dx, 0.003, dz - 0.3); v.rotation.y = dx * 0.35; w.add(v); });
-    w.position.set(sg * 0.35, 0.72, 0.3); w.rotation.y = sg * 0.65; w.rotation.z = sg * -0.08;   // hinge at the thorax top, swept back-outwards
+    const shape = new THREE.Shape(); shape.absellipse(0, 0, 0.6, 1.3, 0, Math.PI * 2, false, 0);   // long axis along the body (z after the tilt)
+    const wm = new THREE.Mesh(new THREE.ShapeGeometry(shape, 40), TOON.wing); wm.rotation.x = -Math.PI / 2; wm.position.set(0, 0, -1.2); w.add(wm);
+    [[-1.1, 0.15], [-1.1, -0.15], [-1.3, 0.38], [-1.3, -0.38]].forEach(([dz, dx]) => { const v = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.005, 1.6), TOON.vein); v.position.set(dx, 0.003, dz); v.rotation.y = -dx * 0.25; w.add(v); });
+    w.position.set(sg * 0.35, 0.72, 0.3); w.rotation.y = -sg * 0.3; w.rotation.z = sg * -0.06;   // hinge at the thorax top, swept back and OUTWARDS (left wing to -x)
     model.add(w);
   });
   return model;
@@ -1281,6 +1286,7 @@ function animate(now) {
   const squash = 1 - 0.18 * Math.sin(Math.PI * landing);
   if (fly.model) fly.model.scale.set(1 + 0.08 * (1 - squash), squash, 1 + 0.06 * (1 - squash));
   if (fly.body) fly.body.scale.set(1, 1 + 0.02 * Math.sin(t0 * 5.2), 1);
+  if (fly.legParts) fly.legParts.forEach(l => { const swing = walking ? Math.sin(fs.phase * 2.2 + l.phase) * 0.32 : grounded ? Math.sin(t0 * 1.4 + l.idle) * 0.035 : 0.25 + Math.sin(t0 * 5 + l.idle) * 0.08; l.group.rotation.x += (swing - l.group.rotation.x) * Math.min(1, dt * 10); l.group.rotation.z = grounded ? 0 : l.side * 0.25; });
   if (fly.legs) { const tuck = (fly.tuck = (fly.tuck || 0) + ((grounded ? 0 : 1) - (fly.tuck || 0)) * Math.min(1, dt * 8)); qA.setFromAxisAngle(AX_X, 0.55 * tuck); qB.setFromAxisAngle(AX_Y, walking ? Math.sin(fs.phase * 2.2) * 0.07 : 0); fly.legs.quaternion.copy(qA).multiply(qB); }
   fly.spread = (fly.spread || 0) + ((grounded ? 0 : 1.25) - (fly.spread || 0)) * Math.min(1, dt * 7);
   const beat = t0 * 88 + Math.sin(t0 * 3) * 0.6, amp = grounded ? 0 : (0.5 + 0.08 * Math.sin(t0 * 2.7)) * Math.min(1, fly.spread);
