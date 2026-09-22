@@ -834,6 +834,7 @@ class CasinoEnv:
         target = (self.drive.target_bet or self._buttons[0]["value"]) * (self.bonus_ratio or 90.0)
         price, win, ok, start_balance = self._buy_bonus(min(target, self.drive.bonus_cap()))
         if not ok:
+            self.drive.last_bonus_spin = self.drive.session_spins   # a failed dialog counts as a try: cooldown, no retry loop
             obs = self._observe()
             return obs, 0.0, False
         if self._buttons and price > 0:

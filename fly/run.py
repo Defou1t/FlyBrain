@@ -11,7 +11,7 @@ import time
 import numpy as np
 
 from . import connectome
-from .agent import Control, Restart, Shutdown, SwitchMode, reset_all, run_episode
+from .agent import Control, Restart, Shutdown, SwitchMode, run_episode
 from .brain import LIF
 from .browser import SESSION_FILE, START, WebEnv, load_session_cookie
 from .motor import Readout

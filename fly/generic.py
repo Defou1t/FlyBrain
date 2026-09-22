@@ -14,7 +14,6 @@ marker. A client that gives no such evidence is marked unplayable instead of bei
 """
 from __future__ import annotations
 
-import json
 import re
 import threading
 import time

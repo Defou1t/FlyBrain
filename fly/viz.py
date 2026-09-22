@@ -9,6 +9,7 @@ Remote viewing: the server listens on all interfaces; remote clients are only se
 from __future__ import annotations
 
 import base64
+import re
 import gzip
 import io
 import json

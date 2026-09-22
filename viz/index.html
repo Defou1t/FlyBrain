@@ -56,7 +56,7 @@
   #gear button.on { color:var(--acc); border-color:#5a4520; }
   #gear button.danger { color:var(--bad); }
   #gear hr { border:0; border-top:1px solid var(--line); margin:3px 0; }
-  #gl.hit { pointer-events:auto; cursor:pointer; }
+  body.hit-fly { cursor:pointer; }   /* desktop: the canvas never takes pointer events (it would cover the buttons); the click is caught on the document */
 
   /* browser card */
   #card-browser .card-b { padding:0; }
@@ -126,7 +126,8 @@
   #gl { position:fixed; left:0; top:0; width:100vw; height:100vh; pointer-events:none; z-index:10; }
   /* arcade view: the fly sits in front of a slot cabinet in a dark room; the cards are hidden */
   body.arcade #desk, body.arcade #hint, body.arcade #layoutbtn { display:none; }
-  body.arcade #gl { z-index:1; pointer-events:auto; }
+  body.arcade #gl { z-index:1; pointer-events:auto; cursor:grab; }
+  body.arcade #gl.hit { cursor:pointer; }
   #enterbtn { position:fixed; left:50%; bottom:34px; transform:translateX(-50%); z-index:20; display:none; background:rgba(12,16,26,.85); color:var(--fg); border:1px solid #3a4a7a; border-radius:24px; padding:11px 26px; font-size:15px; letter-spacing:.3px; cursor:pointer; box-shadow:0 10px 40px rgba(0,0,0,.6), 0 0 0 1px rgba(87,214,255,.15) inset; backdrop-filter:blur(6px); }
   #enterbtn:hover { border-color:var(--cyan); color:#fff; }
   body.arcade { background:#080808; }
@@ -426,8 +427,7 @@ function resize() {
   arcadeCam.aspect = W / H; arcadeCam.updateProjectionMatrix();
   camera.position.set(0, 0, (H / 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
   camera.lookAt(0, 0, 0);
-  if (brainMat) brainMat.uniforms.uCamZ.value = camera.position.z;
-  if (haloMat) haloMat.uniforms.uCamZ.value = camera.position.z;
+  if (brainMat) brainMat.uniforms.uCamZ.value = haloMat.uniforms.uCamZ.value = (typeof view !== 'undefined' && view === 'arcade') ? ARCADE_CAMZ : camera.position.z;   // the arcade camera sits ~2.6 m away, not 1290 px: the wrong value blew the cloud up to the whole screen
   layout(); fitOverlay();
 }
 const toWorld = (sx, sy, z = 0) => new THREE.Vector3(sx - W / 2, H / 2 - sy, z);   // viewport px -> world
@@ -597,7 +597,8 @@ function arcadeHit(x, y) {   // what is under the cursor in the arcade: 'fly' | 
 let hover = null;
 addEventListener('mousemove', e => { if (!isLocal || !fly.ready) return;
   if (view === 'arcade') { hover = arcadeHit(e.clientX, e.clientY); glCanvas.classList.toggle('hit', !!hover); return; }
-  const [fx, fy] = flyOnScreen(), r = Math.min(120, flyRoot.scale.x * fly.len * 0.5); hover = Math.hypot(e.clientX - fx, e.clientY - fy) < r ? 'fly' : null; glCanvas.classList.toggle('hit', !!hover); });
+  const [fx, fy] = flyOnScreen(), r = Math.min(120, flyRoot.scale.x * fly.len * 0.5); hover = Math.hypot(e.clientX - fx, e.clientY - fy) < r ? 'fly' : null; document.body.classList.toggle('hit-fly', !!hover); });
+document.addEventListener('click', e => { if (view === 'arcade' || hover !== 'fly') return; if (e.target.closest('button, input, .card-h, #gear, #session, #topbtns')) return; const g = $('gear'); if (g.style.display === 'flex') { g.style.display = 'none'; return; } openGear(e.clientX, e.clientY, 'fly'); });
 function openGear(x, y, what) {
   const g = $('gear'), inArcade = view === 'arcade';
   $('gear-title').textContent = what === 'cabinet' ? t('gear_machine') : t('gear_title');
@@ -606,10 +607,14 @@ function openGear(x, y, what) {
   $('g-anim').style.display = inArcade ? 'none' : 'block'; $('g-pause').style.display = inArcade ? 'none' : 'block'; $('g-mode').style.display = inArcade ? 'none' : 'block';
   g.style.display = 'flex'; g.style.left = Math.min(W - 250, x + 12) + 'px'; g.style.top = Math.min(H - 260, y - 20) + 'px';
 }
-glCanvas.addEventListener('click', e => { const g = $('gear'); if (g.style.display === 'flex') { g.style.display = 'none'; return; }
-  const what = view === 'arcade' ? arcadeHit(e.clientX, e.clientY) : hover; if (!what) return; openGear(e.clientX, e.clientY, what); });
+const orbit = { offset: 0, dragging: false, x0: 0, start: 0, moved: false };
+glCanvas.addEventListener('pointerdown', e => { if (view !== 'arcade') return; orbit.dragging = true; orbit.moved = false; orbit.x0 = e.clientX; orbit.start = orbit.offset; glCanvas.setPointerCapture(e.pointerId); });
+addEventListener('pointermove', e => { if (!orbit.dragging) return; const dx = e.clientX - orbit.x0; if (Math.abs(dx) > 4) orbit.moved = true; orbit.offset = clamp(orbit.start + dx * 0.004, -1.2, 1.2); });
+addEventListener('pointerup', () => { orbit.dragging = false; });
+glCanvas.addEventListener('click', e => { if (view !== 'arcade') return; if (orbit.moved) { orbit.moved = false; return; } const g = $('gear'); if (g.style.display === 'flex') { g.style.display = 'none'; return; }
+  const what = arcadeHit(e.clientX, e.clientY); if (!what) return; openGear(e.clientX, e.clientY, what); });
 $('g-enter').onclick = () => { $('gear').style.display = 'none'; setView('desktop'); };
-addEventListener('pointerdown', e => { if (!e.target.closest('#gear') && e.target !== glCanvas) $('gear').style.display = 'none'; });
+addEventListener('pointerdown', e => { if (!e.target.closest('#gear') && e.target !== glCanvas && hover !== 'fly') $('gear').style.display = 'none'; });
 async function cmd(do_) { $('gear').style.display = 'none'; const r = await (await fetch('/admin/cmd?do=' + do_)).json(); log(t('log_cmd', do_), 'act'); return r; }
 $('g-anim').onclick = () => { flyCtl.anim = flyCtl.anim === 'walk' ? 'fly' : 'walk'; try { localStorage.setItem('fly.anim', flyCtl.anim); } catch (e) {} applyState(flyCtl); log(flyCtl.anim === 'walk' ? t('log_walk') : t('log_fly')); };
 $('g-pause').onclick = () => cmd(flyCtl.paused ? 'resume' : 'pause');
@@ -776,7 +781,9 @@ function setupModel(model) {
 
   // abdomen bands behind the thorax, faint thorax stripes, fur on both
   if (!cartoon) stripe(MAT.body, tc.z - L * 0.06, 2 * Math.PI * 4.5 / Math.max(0.01, tc.z - bbAll.min.z), 0.8, L * 0.12, 260 / L, 0xfff4e6);
-  fly.rear = tc.z - bbAll.min.z; fly.front = bbAll.max.z - tc.z;   // model units behind / in front of the thorax (for the perch)
+  const footprint = new THREE.Box3(); [thorax, bodyMesh, legsMesh].forEach(o => { if (o) footprint.expandByObject(o); });   // body + legs, wings excluded
+  const fp = footprint.isEmpty() ? bbAll : footprint;
+  fly.rear = tc.z - fp.min.z; fly.front = fp.max.z - tc.z;   // model units behind / in front of the thorax (for the perch)
   fly.below = tc.y - bbAll.min.y;                                   // ... and below it (leg tips), so it stands on a surface
   if (!cartoon) stripe(MAT.thorax, tc.z + L * 0.4, 2 * Math.PI * 3.0 / (L * 0.3), 0.9, L * 0.6, 220 / L, 0xfff4e6);
   if (!cartoon) stripe(MAT.legs, tc.z, 1.0, 1.0, 0.0, 400 / L, 0xbfb0a4);
@@ -864,6 +871,7 @@ addEventListener('scroll', () => { layout(); fitOverlay(); }, { passive: true })
 const arcade = new THREE.Scene();
 arcade.fog = new THREE.Fog(0x080808, 6, 16);
 const arcadeCam = new THREE.PerspectiveCamera(38, 1, 0.05, 100);
+const ARCADE_CAMZ = 2.6;   // reference distance for the brain's point size in the arcade
 let view = 'desktop';
 try { view = localStorage.getItem('fly.view') || 'arcade'; } catch (e) { view = 'arcade'; }
 const vidCanvas = document.createElement('canvas'); vidCanvas.width = 800; vidCanvas.height = 500; const vctx = vidCanvas.getContext('2d');
@@ -917,20 +925,20 @@ function marqueeTexture() {   // "FLYBRAIN" and the BETKING logo (crown + wordma
   const matte = new THREE.MeshStandardMaterial({ color: 0x1a1a1f, roughness: 0.7, metalness: 0.3 });
   const steel = new THREE.MeshStandardMaterial({ color: 0x6e7690, roughness: 0.35, metalness: 0.85, envMap, envMapIntensity: 0.8 });
   const ledCyan = new THREE.MeshBasicMaterial({ color: BK.yellow }), ledPink = new THREE.MeshBasicMaterial({ color: BK.red });   // yellow edges, red accents - the site's palette
-  const pedTop = 0.92, deckBack = 0.22, ledgeH = 0.07, deckDepth = 0.74;
+  const pedTop = 0.92, deckBack = 0.22, ledgeH = 0.07, deckDepth = 0.86;
   // pedestal + kick plate + coin tray
-  const ped = roundedBox(1.0, pedTop - 0.06, 0.72, 0.04, gloss); ped.position.set(0, 0.06 + (pedTop - 0.06) / 2, 0.02); cabinet.add(ped);
-  const kick = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.06, 0.76), matte); kick.position.set(0, 0.03, 0.02); cabinet.add(kick);
-  const tray = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.11, 0.09), matte); tray.position.set(0, 0.24, 0.415); cabinet.add(tray);
-  const trayLip = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.012, 0.11), steel); trayLip.position.set(0, 0.185, 0.42); cabinet.add(trayLip);
+  const ped = roundedBox(1.0, pedTop - 0.06, 0.84, 0.04, gloss); ped.position.set(0, 0.06 + (pedTop - 0.06) / 2, 0.02); cabinet.add(ped);
+  const kick = new THREE.Mesh(new THREE.BoxGeometry(1.04, 0.06, 0.88), matte); kick.position.set(0, 0.03, 0.02); cabinet.add(kick);
+  const tray = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.11, 0.09), matte); tray.position.set(0, 0.24, 0.475); cabinet.add(tray);
+  const trayLip = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.012, 0.11), steel); trayLip.position.set(0, 0.185, 0.48); cabinet.add(trayLip);
   // control deck: slope at the back, flat ledge in front (the perch)
-  const deck = wedge(1.0, deckBack, ledgeH, deckDepth, 0.4, gloss); deck.position.set(0, pedTop, 0.02); cabinet.add(deck);
+  const deck = wedge(1.0, deckBack, ledgeH, deckDepth, 0.52, gloss); deck.position.set(0, pedTop, 0.02); cabinet.add(deck);
   const edgeMat = new THREE.LineBasicMaterial({ color: 0x4a4a55, transparent: true, opacity: 0.8 });   // crisp edges: the black gloss alone had none
   [ped, deck].forEach(m => { const e = new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 25), edgeMat); e.position.copy(m.position); e.rotation.copy(m.rotation); cabinet.add(e); });
   const deckTrim = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.012, 0.016), ledCyan); deckTrim.position.set(0, pedTop + ledgeH + 0.006, 0.02 + deckDepth / 2 - 0.004); cabinet.add(deckTrim);
   // buttons on the slope
-  const slopeAng = Math.atan2(deckBack - ledgeH, deckDepth - 0.4);
-  const onSlope = (mesh, u, along) => { const z0 = 0.02 + deckDepth / 2 - 0.4, y0 = pedTop + ledgeH; mesh.position.set(u, y0 + Math.sin(slopeAng) * along + 0.012 * Math.cos(slopeAng), z0 - Math.cos(slopeAng) * along - 0.012 * Math.sin(slopeAng)); mesh.rotation.x = slopeAng; cabinet.add(mesh); };
+  const slopeAng = Math.atan2(deckBack - ledgeH, deckDepth - 0.52);
+  const onSlope = (mesh, u, along) => { const z0 = 0.02 + deckDepth / 2 - 0.52, y0 = pedTop + ledgeH; mesh.position.set(u, y0 + Math.sin(slopeAng) * along + 0.012 * Math.cos(slopeAng), z0 - Math.cos(slopeAng) * along - 0.012 * Math.sin(slopeAng)); mesh.rotation.x = slopeAng; cabinet.add(mesh); };
   // the fly works a web page, so the deck carries what a kiosk would: a mini keyboard and a mouse
   // (a group placed on the slope; "lift" = height above the slope surface, the group's y axis is the slope normal)
   const onSlopeGroup = (u, along) => { const g = new THREE.Group(); onSlope(g, u, along); g.position.y -= 0.012 * Math.cos(slopeAng); g.position.z += 0.012 * Math.sin(slopeAng); return g; };
@@ -964,7 +972,7 @@ function marqueeTexture() {   // "FLYBRAIN" and the BETKING logo (crown + wordma
   const mqFace = new THREE.Mesh(new THREE.PlaneGeometry(0.94, 0.16), new THREE.MeshBasicMaterial({ map: marqueeTexture(), toneMapped: false })); mqFace.position.set(0, headY + 0.51, headZ + 0.11 + 0.15 + 0.014); cabinet.add(mqFace);
   const mqGlow = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.012, 0.28), ledPink); mqGlow.position.set(0, headY + 0.51 - 0.107, headZ + 0.11); cabinet.add(mqGlow);
   // side LED strips down the pedestal front edges
-  [-1, 1].forEach(sg => { const strip = new THREE.Mesh(new THREE.BoxGeometry(0.012, pedTop - 0.12, 0.012), ledCyan); strip.position.set(sg * 0.5, 0.06 + (pedTop - 0.06) / 2, 0.402); cabinet.add(strip); });
+  [-1, 1].forEach(sg => { const strip = new THREE.Mesh(new THREE.BoxGeometry(0.012, pedTop - 0.12, 0.012), ledCyan); strip.position.set(sg * 0.5, 0.06 + (pedTop - 0.06) / 2, 0.462); cabinet.add(strip); });
   // lights: the screen's glow on the fly, a cone from above, room fill
   const glow = new THREE.PointLight(0xffd7dc, 1.1, 3.5, 2); glow.position.set(0, headY - 0.1, 0.55); cabinet.add(glow); cabinet.userData.glow = glow;
   const spot = new THREE.SpotLight(0xdfe6ff, 1.1, 9, 0.5, 0.6, 1.5); spot.position.set(0.4, 4.2, 1.6); spot.target.position.set(0, 1.2, 0.1); arcade.add(spot); arcade.add(spot.target);
@@ -986,7 +994,7 @@ function marqueeTexture() {   // "FLYBRAIN" and the BETKING logo (crown + wordma
   const knob = new THREE.Mesh(new THREE.SphereGeometry(0.06, 24, 16), new THREE.MeshPhysicalMaterial({ color: BK.red, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.1, envMap, envMapIntensity: 0.8 })); knob.position.set(0, 0.52, 0); pivot.add(knob);
   const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.06, 20), steel); hub.rotation.z = Math.PI / 2; pivot.add(hub);
   cabinet.userData.lever = pivot;
-  cabinet.userData.perch = { y: pedTop + ledgeH, z: 0.02 + deckDepth / 2 - 0.13, front: 0.02 + deckDepth / 2, screenY: headY };
+  cabinet.userData.perch = { y: pedTop + ledgeH, z: 0.02 + deckDepth / 2 - 0.13, front: 0.02 + deckDepth / 2, ledgeBack: 0.02 + deckDepth / 2 - 0.52, screenY: headY };
 }
 const brainLight = new THREE.PointLight(0x9fb4ff, 0.8, 3, 2); brainLight.position.set(0, 2.6, 0.6);
 function setView(v) {
@@ -995,12 +1003,13 @@ function setView(v) {
   if (v === 'arcade') {
     scene.remove(flyRoot); scene.remove(brainGroup); scene.remove(smokePts); arcade.add(flyRoot); arcade.add(brainGroup); arcade.add(brainLight); arcade.add(smokePts);
     brainGroup.position.set(0, 2.42, 0.0); brainGroup.scale.setScalar(0.58); brainGroup.position.y -= brainTop * 0.62;
-    if (brainMat) { brainMat.uniforms.uCamZ.value = haloMat.uniforms.uCamZ.value = 2.6; brainMat.uniforms.uSize.value = haloMat.uniforms.uSize.value = 2.6; brainMat.uniforms.uHideBelow.value = haloMat.uniforms.uHideBelow.value = NECK; }
+    if (brainMat) { brainMat.uniforms.uCamZ.value = haloMat.uniforms.uCamZ.value = ARCADE_CAMZ; brainMat.uniforms.uSize.value = haloMat.uniforms.uSize.value = 2.6; brainMat.uniforms.uHideBelow.value = haloMat.uniforms.uHideBelow.value = NECK; }
     if (fly.ready) flyRoot.scale.setScalar(0.5 / fly.len);
     flyState.mode = 'perch';
     if (typeof setToonGain === 'function') setToonGain(0.34);
   } else {
     if (typeof setToonGain === 'function') setToonGain(0.55);
+    glCanvas.classList.remove('hit'); hover = null;
     arcade.remove(flyRoot); arcade.remove(brainGroup); arcade.remove(brainLight); arcade.remove(smokePts); scene.add(flyRoot); scene.add(brainGroup); scene.add(smokePts);
     if (brainMat) { brainMat.uniforms.uCamZ.value = haloMat.uniforms.uCamZ.value = camera.position.z; brainMat.uniforms.uHideBelow.value = haloMat.uniforms.uHideBelow.value = -9; }
     flyState.mode = flyCtl.broke ? 'smoke' : flyCtl.anim === 'walk' ? 'walk' : 'hover';
@@ -1273,7 +1282,7 @@ function animate(now) {
   } else if (fs.mode === 'perch') {   // arcade: sits on the cabinet's ledge, facing the screen, watching the reels
     grounded = true;
     const pr = cabinet.userData.perch, sc = flyRoot.scale.x, rear = (fly.rear || 0) * sc, below = (fly.below || 0) * sc * 0.92;
-    fs.pos.set(-0.04, pr.y + below, pr.front - 0.04 - rear);       // the abdomen ends inside the ledge, never over the edge
+    fs.pos.set(-0.04, pr.y + below, Math.max(pr.front - 0.04 - rear, pr.ledgeBack + (fly.front || 0) * sc + 0.02));       // the abdomen ends inside the ledge, never over the edge
     flyRoot.position.copy(fs.pos); flyRoot.position.y += Math.sin(t0 * 1.7) * 0.004;
     tmp.set(fs.pos.x - 0.02, fs.pos.y + 0.02 + Math.sin(t0 * 0.6) * 0.02, fs.pos.z - 0.8); qTarget.copy(flyRoot.quaternion); flyRoot.lookAt(tmp); flyRoot.rotateX(0.12 + Math.sin(t0 * 0.9) * 0.03); flyRoot.rotateY(Math.sin(t0 * 0.35) * 0.12);
     qA.copy(flyRoot.quaternion); flyRoot.quaternion.copy(qTarget).slerp(qA, Math.min(1, dt * 4));
@@ -1306,7 +1315,8 @@ function animate(now) {
   if (ripple) drawOverlay();
   if (view === 'arcade') {
     if (fs.mode !== 'perch' && fs.mode !== 'smoke') fs.mode = 'perch';
-    const ang = Math.sin(t0 * 0.11) * 0.6, dist = 3.0 + Math.sin(t0 * 0.07) * 0.2;
+    if (!orbit.dragging) orbit.offset *= 1 - Math.min(1, dt * 0.15);   // drifts back to the automatic sweep
+    const ang = clamp(Math.sin(t0 * 0.11) * 0.6 + orbit.offset, -0.9, 0.9), dist = 3.0 + Math.sin(t0 * 0.07) * 0.2;
     arcadeCam.position.set(Math.sin(ang) * dist, 1.95 + Math.sin(t0 * 0.13) * 0.1, Math.cos(ang) * dist + 0.3);
     arcadeCam.lookAt(0, 1.58, 0.05);
     updateVideoTexture();
